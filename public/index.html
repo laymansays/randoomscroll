@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#ADFF2F" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Rand00mscroll" />
+    <meta name="application-name" content="Rand00mscroll" />
+    <meta name="msapplication-TileColor" content="#08080E" />
+
+    <!-- SEO / Description -->
+    <meta name="description" content="Self-sustaining YouTube Shorts content engine. One niche per week. Three videos per day." />
+    <meta name="robots" content="noindex" />
+
+    <!-- Open Graph (for sharing) -->
+    <meta property="og:title" content="Rand00mscroll Engine" />
+    <meta property="og:description" content="Self-sustaining YouTube content engine" />
+    <meta property="og:type" content="website" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Favicon (inline SVG as data URI) -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%2308080E'/%3E%3Ccircle cx='16' cy='16' r='11' fill='none' stroke='%23ADFF2F' stroke-width='1.5'/%3E%3Cpolygon points='13,10 23,16 13,22' fill='%23ADFF2F'/%3E%3C/svg%3E" />
+
+    <!-- Safe area insets for notched Android phones -->
+    <style>
+      body {
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+        padding-left: env(safe-area-inset-left);
+        padding-right: env(safe-area-inset-right);
+        background-color: #08080E;
+      }
+    </style>
+
+    <title>Rand00mscroll</title>
+  </head>
+  <body>
+    <noscript>JavaScript is required to run the Rand00mscroll engine.</noscript>
+    <div id="root"></div>
+  </body>
+</html>
