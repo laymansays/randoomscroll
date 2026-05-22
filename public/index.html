@@ -155,8 +155,8 @@ function tryJSON(t) {
 
 async function fetchTrending(niche) {
   const d = await claudeCall(
-    [{role:"user", content:"Search for 8 trending topics RIGHT NOW for faceless YouTube Shorts in the \"" + niche + "\" niche. Use YouTube trending, Google Trends, Reddit. Return ONLY a JSON array:\n[{\"topic\":\"full topic\",\"heat\":95,\"source\":\"YouTube\"},...]"}],
-    {tools:[{type:"web_search_20250305", name:"web_search"}], maxTokens:900}
+    [{role:"user", content:"You are a YouTube Shorts trend analyst. Generate 8 specific trending topic ideas for faceless YouTube Shorts in the \"" + niche + "\" niche. Focus on topics that are currently popular, controversial, or have high search interest. Make each topic specific and clickable — not generic. Assign a heat score 70-99 based on estimated interest level. Return ONLY a valid JSON array, no other text:\n[{\"topic\":\"specific trending topic title\",\"heat\":95,\"source\":\"YouTube\"},...]"}],
+    {maxTokens:900}
   );
   return tryJSON(getText(d)) || [];
 }
@@ -387,7 +387,7 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
     setTrendErr(""); setLoading(true); setTrending([]);
     try {
       const t = await fetchTrending(niche.trim());
-      setTrending(t.length ? t : [{topic:"No results — try a broader term", heat:0, source:"—"}]);
+      if (t.length) { setTrending(t); } else { setTrendErr("No results — try a more specific niche e.g. AI Tools, Personal Finance"); setTrending([]); }
     } catch { setTrendErr("Search failed — check connection"); }
     setLoading(false);
   };
