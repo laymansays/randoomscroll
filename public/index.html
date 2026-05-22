@@ -51,19 +51,27 @@ const CTYPES = [
   {id:"storytime",   label:"Storytime",   color:"#FF9F43"},
 ];
 
-function makeSlots(types) {
+function makeSlots(types, topics) {
   const t = types.length ? types : ["engaging"];
+  const tp = topics && topics.length ? topics : ["general"];
   const s = [];
   let ti = 0;
+  // Distribute 21 slots evenly across topics (7 per topic for 3 topics)
+  const slotsPerTopic = Math.ceil(21 / tp.length);
+  let slotCount = 0;
   for (let d = 0; d < 7; d++)
-    for (let x = 0; x < 3; x++)
+    for (let x = 0; x < 3; x++) {
+      const topicIndex = Math.floor(slotCount / slotsPerTopic) % tp.length;
       s.push({
         id: uid(), day: d, time: x,
         contentType: t[ti++ % t.length],
+        topic: tp[topicIndex],
         status: "pending", script: null,
         keywords: [], footage: [],
         youtubeId: null, scheduleStatus: "unscheduled", igScheduled: false,
       });
+      slotCount++;
+    }
   return s;
 }
 
@@ -161,9 +169,10 @@ async function fetchTrending(niche) {
   return tryJSON(getText(d)) || [];
 }
 
-async function genScripts(topic, types, evolved) {
+async function genScripts(slots, evolved) {
+  // slots is array of {topic, contentType} — each may have different topic
   const d = await claudeCall(
-    [{role:"user", content:"Write " + types.length + " short-form faceless YouTube Shorts scripts.\nTopic: \"" + topic + "\"\nTypes: " + types.map(function(t,i){return (i+1)+"="+t;}).join(", ") + "\n" + (evolved ? "Style guidance: " + evolved : "") + "\n\nRules: max 60 words, punchy sentences, strong hook first 8 sec, voiceover-ready.\n\nReturn ONLY valid JSON array:\n[{\"title\":\"video title\",\"type\":\"content type\",\"script\":\"full script\",\"hook\":\"opening line only\",\"ytCaption\":\"YouTube caption with 3 hashtags\"}]"}],
+    [{role:"user", content:"Write " + slots.length + " short-form faceless YouTube Shorts scripts. Each script must match its assigned topic and content type exactly.\n\nScripts to write:\n" + slots.map(function(s,i){return (i+1)+". Topic: \""+s.topic+"\" | Type: "+s.contentType;}).join("\n") + "\n\n" + (evolved ? "Style guidance: " + evolved + "\n\n" : "") + "Rules: max 60 words each, punchy sentences, strong hook first 8 sec, voiceover-ready.\n\nReturn ONLY a valid JSON array with exactly " + slots.length + " items:\n[{\"title\":\"video title\",\"type\":\"content type\",\"topic\":\"topic used\",\"script\":\"full script\",\"hook\":\"opening line only\",\"ytCaption\":\"YouTube caption with 3 hashtags\"}]"}],
     {maxTokens:2000}
   );
   return tryJSON(getText(d)) || [];
@@ -371,49 +380,72 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
   const [trending, setTrending] = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [trendErr, setTrendErr] = useState("");
-  const [selTopic, setSelTopic] = useState(null);
-  const [custom,   setCustom]   = useState("");
+  const [topics,   setTopics]   = useState(["", "", ""]);  // 3 topic slots
   const [selTypes, setSelTypes] = useState(["cliffhanger","explanatory"]);
   const [usedRec,  setUsedRec]  = useState(false);
 
   const week = weeks.find(w => w.id === selWeek);
-  const activeTopic = selTopic ? selTopic.topic : custom;
   const hasRecs = lastInsight && lastInsight.nextNiches && lastInsight.nextNiches.length > 0;
+  const validTopics = topics.filter(t => t.trim().length > 0);
+  const canLock = validTopics.length > 0 && selTypes.length > 0 && niche.trim().length > 0;
 
-  const applyRec = (n) => { setCustom(n); setSelTopic(null); setNiche(n); setUsedRec(true); };
+  const applyRec = (n) => { setNiche(n); setUsedRec(true); };
 
   const doSearch = async () => {
     if (!niche.trim()) { setTrendErr("Enter a niche first"); return; }
     setTrendErr(""); setLoading(true); setTrending([]);
     try {
-      const t = await fetchTrending(niche.trim());
-      if (t.length) { setTrending(t); } else { setTrendErr("No results — try a more specific niche e.g. AI Tools, Personal Finance"); setTrending([]); }
+      const d = await claudeCall(
+        [{role:"user", content:"You are a YouTube Shorts trend analyst. Generate 8 specific trending topic ideas for faceless YouTube Shorts in the \"" + niche.trim() + "\" niche. Focus on topics that are currently popular, controversial, or have high search interest. Make each topic specific and clickable. Assign a heat score 70-99. Return ONLY a valid JSON array:\n[{\"topic\":\"specific topic title\",\"heat\":95,\"source\":\"YouTube\"},...]"}],
+        {maxTokens:900}
+      );
+      const t = tryJSON(getText(d)) || [];
+      if (t.length) { setTrending(t); } else { setTrendErr("No results — try a more specific niche e.g. AI Tools, Personal Finance"); }
     } catch { setTrendErr("Search failed — check connection"); }
     setLoading(false);
+  };
+
+  const setTopic = (idx, val) => {
+    const updated = [...topics];
+    updated[idx] = val;
+    setTopics(updated);
+  };
+
+  const pickTrending = (idx, topicText) => {
+    const updated = [...topics];
+    // Fill the first empty slot, or the slot at idx
+    const emptyIdx = topics.findIndex(t => t.trim() === "");
+    const target = emptyIdx >= 0 ? emptyIdx : idx % 3;
+    updated[target] = topicText;
+    setTopics(updated);
   };
 
   const toggleType = (id) => setSelTypes(p => p.includes(id) ? p.filter(t => t !== id) : [...p, id]);
 
   const lockWeek = () => {
-    if (!activeTopic || !selTypes.length) return;
+    if (!canLock) return;
+    const filled = validTopics;
     const isFirst = weeks.filter(x => x.status === "live").length === 0;
     setWeeks(prev => prev.map(w => w.id === selWeek ? {
       ...w,
       status: isFirst ? "live" : "draft",
       frozen: isFirst,
-      niche: niche.trim() || activeTopic.slice(0, 22),
-      topic: activeTopic,
+      niche: niche.trim(),
+      topic: filled[0],   // primary topic for display
+      topics: filled,     // all topics
       contentTypes: selTypes,
-      slots: makeSlots(selTypes),
+      slots: makeSlots(selTypes, filled),
     } : w));
-    setSelTopic(null); setCustom(""); setNiche(""); setTrending([]); setUsedRec(false);
+    setTopics(["","",""]); setNiche(""); setTrending([]); setUsedRec(false);
   };
+
+  const slotsPerTopic = validTopics.length > 0 ? Math.ceil(21 / validTopics.length) : 7;
 
   return (
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
       <div>
         <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Weekly Planner</h2>
-        <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>One niche · One week · 21 videos · Rolling runway</p>
+        <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>One niche · Multiple topics · 21 videos · Rolling runway</p>
       </div>
 
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>
@@ -429,7 +461,7 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
           <p style={{fontSize:"13px",color:"#888",marginBottom:"10px"}}>Go to <strong style={{color:"#ADFF2F"}}>Content Engine</strong> to generate scripts.</p>
           <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
             <Tag color="#FF6B35">{week.niche}</Tag>
-            <Tag color="#00CFFF">{(week.topic||"").slice(0,32)}</Tag>
+            {week.topics && week.topics.map((t,i) => <Tag key={i} color="#00CFFF">{t.slice(0,28)}{t.length>28?"...":""}</Tag>)}
           </div>
         </Card>
       )}
@@ -442,7 +474,7 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
       )}
 
       {week && week.status === "intention" && (
-        <Card style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+        <Card style={{display:"flex",flexDirection:"column",gap:"20px"}}>
           <div style={{fontWeight:700,fontSize:"16px"}}>
             Planning Week {selWeek}{weeks.filter(x=>x.status==="live").length===0 ? " — This becomes your live Week 1" : ""}
           </div>
@@ -453,65 +485,81 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
                 <div style={{width:22,height:22,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#00CFFF"}}>◈</div>
                 <SL color="#00CFFF">ENGINE RECOMMENDS — FROM YOUR ANALYTICS</SL>
               </div>
-              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"8px"}}>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
                 {lastInsight.nextNiches.map((n,i) => (
                   <button key={i} onClick={() => applyRec(n)}
-                    style={{background:usedRec&&custom===n?"#0D1A0D":"#0A0A12",border:"1px solid "+(usedRec&&custom===n?"#ADFF2F":i===0?"#FF6B3566":"#1A1A2A"),color:i===0?"#FF6B35":"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:i===0?700:400,fontSize:"13px",cursor:"pointer"}}>
+                    style={{background:usedRec&&niche===n?"#0D1A0D":"#0A0A12",border:"1px solid "+(usedRec&&niche===n?"#ADFF2F":i===0?"#FF6B3566":"#1A1A2A"),color:i===0?"#FF6B35":"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:i===0?700:400,fontSize:"13px",cursor:"pointer"}}>
                     {i===0 && "★ "}{n}
                   </button>
                 ))}
               </div>
-              {usedRec && custom && (
-                <div style={{background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"8px",padding:"8px 12px",fontSize:"13px"}}>
-                  Applied: <strong style={{color:"#ADFF2F"}}>{custom}</strong>
-                </div>
-              )}
             </div>
           )}
 
           {!hasRecs && (
             <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"12px"}}>
-              <p style={{fontFamily:"Space Mono",fontSize:"11px",color:"#444",lineHeight:1.7}}>Engine recommendations appear here after your first analytics run. Enter your niche manually below.</p>
+              <p style={{fontFamily:"Space Mono",fontSize:"11px",color:"#444",lineHeight:1.7}}>Engine recommendations appear here after your first analytics run.</p>
             </div>
           )}
 
+          {/* Step 1 — Niche */}
           <div>
             <SL>STEP 1 — NICHE</SL>
             <input value={niche} onChange={e => { setNiche(e.target.value); setUsedRec(false); }}
-              placeholder="e.g. Personal Finance, AI Tools, True Crime..."
+              placeholder="e.g. AI Tools, Personal Finance, True Crime..."
               style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/>
           </div>
 
+          {/* Step 2 — Topics */}
           <div>
-            <SL>STEP 2 — TRENDING TOPIC</SL>
-            <div style={{marginBottom:"10px"}}>
-              <Btn variant="outline" small onClick={doSearch}>
-                {loading ? <><Spinner size={12}/>Searching...</> : "Search Trending Now"}
-              </Btn>
+            <SL>STEP 2 — PICK UP TO 3 TOPICS</SL>
+            <div style={{fontSize:"12px",color:"#555",marginBottom:"10px",fontFamily:"Space Mono"}}>
+              {slotsPerTopic} videos per topic · {validTopics.length} topic{validTopics.length!==1?"s":""} selected · {validTopics.length*slotsPerTopic} of 21 slots filled
             </div>
-            {trendErr && <div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px"}}>{trendErr}</div>}
-            {trending.length > 0 && (
-              <div style={{display:"flex",flexDirection:"column",gap:"5px",marginBottom:"10px"}}>
-                {trending.map((t,i) => (
-                  <div key={i} onClick={() => { setSelTopic(t); setCustom(""); setUsedRec(false); }}
-                    style={{display:"flex",alignItems:"center",gap:"10px",padding:"9px 12px",borderRadius:"8px",cursor:"pointer",background:selTopic&&selTopic.topic===t.topic?"#0D1A0D":"#0A0A12",border:"1px solid "+(selTopic&&selTopic.topic===t.topic?"#ADFF2F":"#1A1A2A"),transition:"all .15s"}}>
-                    <div style={{fontFamily:"Space Mono",fontSize:"12px",fontWeight:700,width:26,flexShrink:0,color:t.heat>92?"#FF2D6B":t.heat>87?"#FF6B35":"#ADFF2F"}}>{t.heat}</div>
-                    <div style={{flex:1,fontSize:"13px"}}>{t.topic}</div>
-                    <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#444"}}>{t.source||t.src}</div>
-                  </div>
-                ))}
+
+            {/* 3 topic input slots */}
+            {[0,1,2].map(idx => (
+              <div key={idx} style={{marginBottom:"8px"}}>
+                <div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"4px"}}>
+                  TOPIC {idx+1} {idx===0?"(required)":"(optional)"} — ~{slotsPerTopic} videos
+                </div>
+                <input
+                  value={topics[idx]}
+                  onChange={e => setTopic(idx, e.target.value)}
+                  placeholder={idx===0?"Enter your main topic...":idx===1?"Enter a second angle (optional)...":"Enter a third angle (optional)..."}
+                  style={{width:"100%",background:topics[idx]?"#0D1A0D":"#0A0A12",border:"1px solid "+(topics[idx]?"#ADFF2F44":"#1E1E2E"),borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px",transition:"all .2s"}}/>
               </div>
-            )}
-            <input value={custom} onChange={e => { setCustom(e.target.value); setSelTopic(null); setUsedRec(false); }}
-              placeholder="Or type a specific topic..."
-              style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/>
-            {activeTopic && (
-              <div style={{marginTop:"8px",background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"8px",padding:"8px 12px",fontSize:"13px"}}>
-                Selected: <strong style={{color:"#ADFF2F"}}>{activeTopic}</strong>
+            ))}
+
+            {/* Trending search */}
+            <div style={{marginTop:"12px"}}>
+              <div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"8px"}}>OR SEARCH FOR TRENDING TOPICS TO FILL THE SLOTS ABOVE</div>
+              <Btn variant="outline" small onClick={doSearch}>
+                {loading ? <><Spinner size={12}/>Searching...</> : "Search Trending Topics"}
+              </Btn>
+              {trendErr && <div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"8px"}}>{trendErr}</div>}
+            </div>
+
+            {trending.length > 0 && (
+              <div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"5px"}}>
+                <div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"4px"}}>TAP A TOPIC TO ADD IT TO YOUR SLOTS ABOVE</div>
+                {trending.map((t,i) => {
+                  const alreadyAdded = topics.some(tp => tp === t.topic);
+                  return (
+                    <div key={i}
+                      onClick={() => !alreadyAdded && pickTrending(i, t.topic)}
+                      style={{display:"flex",alignItems:"center",gap:"10px",padding:"9px 12px",borderRadius:"8px",cursor:alreadyAdded?"default":"pointer",background:alreadyAdded?"#0D1A0D":"#0A0A12",border:"1px solid "+(alreadyAdded?"#ADFF2F44":"#1A1A2A"),opacity:alreadyAdded?0.6:1,transition:"all .15s"}}>
+                      <div style={{fontFamily:"Space Mono",fontSize:"12px",fontWeight:700,width:26,flexShrink:0,color:t.heat>92?"#FF2D6B":t.heat>87?"#FF6B35":"#ADFF2F"}}>{t.heat}</div>
+                      <div style={{flex:1,fontSize:"13px"}}>{t.topic}</div>
+                      <div style={{fontFamily:"Space Mono",fontSize:"9px",color:alreadyAdded?"#ADFF2F":"#444"}}>{alreadyAdded?"✓ added":t.source||t.src}</div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
 
+          {/* Step 3 — Content types */}
           <div>
             <SL>STEP 3 — CONTENT TYPE MIX</SL>
             <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"8px"}}>
@@ -523,11 +571,23 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
               ))}
             </div>
             <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444"}}>
-              21 videos · {selTypes.length} type{selTypes.length!==1?"s":""} · ~{Math.ceil(21/Math.max(selTypes.length,1))} each
+              21 videos · {selTypes.length} format{selTypes.length!==1?"s":""} · distributed across {validTopics.length||1} topic{validTopics.length!==1?"s":""}
             </div>
           </div>
 
-          <Btn onClick={lockWeek} disabled={!activeTopic || !selTypes.length}>
+          {/* Summary before locking */}
+          {canLock && (
+            <div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"10px",padding:"12px 14px"}}>
+              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>WEEK {selWeek} SUMMARY</div>
+              <div style={{fontSize:"13px",color:"#888",lineHeight:1.8}}>
+                <div>Niche: <strong style={{color:"#E8E8F0"}}>{niche}</strong></div>
+                {validTopics.map((t,i) => <div key={i}>Topic {i+1}: <strong style={{color:"#E8E8F0"}}>{t}</strong> — {slotsPerTopic} videos</div>)}
+                <div>Formats: <strong style={{color:"#E8E8F0"}}>{selTypes.join(", ")}</strong></div>
+              </div>
+            </div>
+          )}
+
+          <Btn onClick={lockWeek} disabled={!canLock}>
             Lock Week {selWeek} and Start
           </Btn>
         </Card>
@@ -570,7 +630,9 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
     for (let i = 0; i < pending.length; i += 3) {
       const batch = pending.slice(i, i + 3);
       try {
-        const scripts = await genScripts(activeWeek.topic || "trending topic", batch.map(s => s.contentType), activeWeek.evolvedPrompt);
+        // Pass full slot info so each script uses its assigned topic
+        const slotInfo = batch.map(s => ({topic: s.topic || activeWeek.topic || "trending topic", contentType: s.contentType}));
+        const scripts = await genScripts(slotInfo, activeWeek.evolvedPrompt);
         batch.forEach((slot, j) => {
           if (scripts[j]) updateSlot(activeWeek.id, slot.id, {script:scripts[j], status:"script_ready"});
         });
@@ -689,10 +751,23 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
       )}
 
       {activeWeek && (
-        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"10px 14px",display:"flex",gap:"10px",flexWrap:"wrap",alignItems:"center"}}>
-          <Tag color="#FF6B35">Week {activeWeek.id}</Tag>
-          <Tag color="#B06EF3">{activeWeek.niche}</Tag>
-          <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{activeWeek.topic}</span>
+        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"10px 14px"}}>
+          <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",marginBottom: activeWeek.topics&&activeWeek.topics.length>1?"8px":"0"}}>
+            <Tag color="#FF6B35">Week {activeWeek.id}</Tag>
+            <Tag color="#B06EF3">{activeWeek.niche}</Tag>
+            <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555"}}>
+              {activeWeek.topics ? activeWeek.topics.length+" topics" : "1 topic"} · 21 videos
+            </span>
+          </div>
+          {activeWeek.topics && activeWeek.topics.length > 1 && (
+            <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
+              {activeWeek.topics.map((t,i) => (
+                <div key={i} style={{background:"#111",border:"1px solid #2a2a3a",borderRadius:"6px",padding:"4px 10px",fontSize:"11px",color:"#888"}}>
+                  <span style={{color:"#ADFF2F",fontFamily:"Space Mono",fontSize:"9px"}}>T{i+1} </span>{t.slice(0,30)}{t.length>30?"...":""}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -757,7 +832,7 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
                       <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",width:"50px",flexShrink:0}}>{TIMES[slot.time]}</div>
                       <div style={{width:6,height:6,borderRadius:"50%",background:SC[slot.status]||"#2a2a3a",flexShrink:0}}/>
                       <div style={{flex:1,fontSize:"13px",fontWeight:slot.script?600:400,color:slot.script?"#E8E8F0":"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {slot.script ? slot.script.title : "Waiting..."}
+                        {slot.script ? slot.script.title : (slot.topic ? slot.topic.slice(0,30)+"..." : "Waiting...")}
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
                         {slot.scheduleStatus==="youtube_done" && <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F"}}>YT</span>}
