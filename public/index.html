@@ -612,6 +612,10 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
   const [manifest,     setManifest]     = useState("");
   const [importErr,    setImportErr]    = useState("");
   const [importOk,     setImportOk]     = useState(false);
+  const [batchingKW,   setBatchingKW]   = useState(false);
+  const [batchKWProgress, setBatchKWProgress] = useState(0);
+  const [batchingFoot, setBatchingFoot] = useState(false);
+  const [batchFootProgress, setBatchFootProgress] = useState(0);
 
   const activeWeek = weeks.find(w => w.id === activeId) || workable[0];
 
@@ -658,6 +662,38 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
       : [{id:"mock", preview:null, url:"#", duration:10}];
     updateSlot(activeWeek.id, slot.id, {footage:clips, status:"footage_found"});
     setFootageId(null);
+  };
+
+  const batchExtract = async () => {
+    if (!activeWeek) return;
+    const ready = activeWeek.slots.filter(s => s.status === "script_ready");
+    setBatchingKW(true); setBatchKWProgress(0);
+    for (let i = 0; i < ready.length; i++) {
+      const slot = ready[i];
+      try {
+        const k = await extractKW(slot.script.script);
+        updateSlot(activeWeek.id, slot.id, {keywords:k, status:"keywords_extracted"});
+      } catch(e) { console.error(e); }
+      setBatchKWProgress(i + 1);
+    }
+    setBatchingKW(false);
+  };
+
+  const batchFootage = async () => {
+    if (!activeWeek) return;
+    const ready = activeWeek.slots.filter(s => s.status === "keywords_extracted");
+    setBatchingFoot(true); setBatchFootProgress(0);
+    for (let i = 0; i < ready.length; i++) {
+      const slot = ready[i];
+      if (slot.keywords && slot.keywords.length > 0) {
+        const clips = settings.pexelsKey
+          ? await pexelsSearch(slot.keywords[0], settings.pexelsKey)
+          : [{id:"mock", preview:null, url:"#", duration:10}];
+        updateSlot(activeWeek.id, slot.id, {footage:clips, status:"footage_found"});
+      }
+      setBatchFootProgress(i + 1);
+    }
+    setBatchingFoot(false);
   };
 
   const doExport = () => {
@@ -735,7 +771,17 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
             ? <div style={{display:"flex",alignItems:"center",gap:"8px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"9px 14px"}}><Spinner/><span style={{fontFamily:"Space Mono",fontSize:"12px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
             : <Btn onClick={generateAll} disabled={!pendingCt}>{pendingCt ? "Generate "+pendingCt+" Scripts" : "All Scripts Done"}</Btn>
           }
-          {footageCt > 0 && <Btn variant="ghost" small onClick={doExport}>{exported ? "Exported" : "Export Jobs"}</Btn>}
+          {readyCt > 0 && !generating && (
+            <Btn variant="ghost" small onClick={batchExtract} disabled={batchingKW}>
+              {batchingKW ? <><Spinner size={12}/>{batchKWProgress}/{readyCt}</> : "Extract All Keywords"}
+            </Btn>
+          )}
+          {slots.filter(s=>s.status==="keywords_extracted").length > 0 && !batchingKW && (
+            <Btn variant="ghost" small onClick={batchFootage} disabled={batchingFoot}>
+              {batchingFoot ? <><Spinner size={12}/>{batchFootProgress}/{slots.filter(s=>s.status==="keywords_extracted").length}</> : "Find All Footage"}
+            </Btn>
+          )}
+          {footageCt > 0 && <Btn variant="green" small onClick={doExport}>{exported ? "✓ Exported" : "↓ Export Jobs"}</Btn>}
         </div>
       </div>
 
