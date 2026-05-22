@@ -6,11 +6,11 @@
 <meta name="theme-color" content="#ADFF2F"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Rand00mscroll</title>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-tap-highlight-color:transparent}
@@ -34,7 +34,7 @@ textarea{resize:vertical}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="text/babel">
-const {useState, useEffect} = React;
+const {useState, useEffect, useRef} = React;
 
 // ── Constants ──────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -50,13 +50,13 @@ const CTYPES = [
   {id:"engaging",    label:"Engaging",    color:"#00D4AA"},
   {id:"storytime",   label:"Storytime",   color:"#FF9F43"},
 ];
+const CTYPE_COLOR = Object.fromEntries(CTYPES.map(c => [c.id, c.color]));
 
 function makeSlots(types, topics) {
   const t = types.length ? types : ["engaging"];
   const tp = topics && topics.length ? topics : ["general"];
   const s = [];
   let ti = 0;
-  // Distribute 21 slots evenly across topics (7 per topic for 3 topics)
   const slotsPerTopic = Math.ceil(21 / tp.length);
   let slotCount = 0;
   for (let d = 0; d < 7; d++)
@@ -67,8 +67,8 @@ function makeSlots(types, topics) {
         contentType: t[ti++ % t.length],
         topic: tp[topicIndex],
         status: "pending", script: null,
-        keywords: [], footage: [],
-        youtubeId: null, scheduleStatus: "unscheduled", igScheduled: false,
+        videoBlob: null, videoUrl: null,
+        youtubeId: null, scheduleStatus: "unscheduled",
       });
       slotCount++;
     }
@@ -77,14 +77,14 @@ function makeSlots(types, topics) {
 
 // ALL 4 WEEKS START BLANK
 const INIT_WEEKS = [
-  {id:1, status:"intention", frozen:false, niche:null, topic:null, contentTypes:[], score:null, slots:[], evolvedPrompt:""},
-  {id:2, status:"intention", frozen:false, niche:null, topic:null, contentTypes:[], score:null, slots:[], evolvedPrompt:""},
-  {id:3, status:"intention", frozen:false, niche:null, topic:null, contentTypes:[], score:null, slots:[], evolvedPrompt:""},
-  {id:4, status:"intention", frozen:false, niche:null, topic:null, contentTypes:[], score:null, slots:[], evolvedPrompt:""},
+  {id:1, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
+  {id:2, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
+  {id:3, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
+  {id:4, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
 ];
 
 const INIT_SETTINGS = {
-  pexelsKey:"", youtubeChannelId:"",
+  youtubeClientId:"", youtubeChannelId:"",
   postingTimes:["07:00","13:00","18:00"],
   voiceId:"en-US-ChristopherNeural", targetDuration:55,
   instagramEnabled:false, bufferKey:"", bufferInstagramProfileId:"",
@@ -93,216 +93,277 @@ const INIT_SETTINGS = {
 
 const MOCK_ANALYTICS = {
   weekScore:84, ctr:5.2, duration:67, newSubs:143, estRevenue:34,
-  contentScores:[
-    {type:"Cliffhanger", score:91, ctr:7.1},
-    {type:"Explanatory", score:78, ctr:4.8},
-    {type:"Ragebait",    score:64, ctr:3.2},
-  ],
+  contentScores:[{type:"Cliffhanger",score:91,ctr:7.1},{type:"Explanatory",score:78,ctr:4.8},{type:"Ragebait",score:64,ctr:3.2}],
   postingTimes:{"07:00":2400,"13:00":4100,"18:00":6800},
   topVideo:{title:"5 AI Tools Nobody Talks About", views:4821, ctr:8.1},
 };
 
-// ── Supabase helpers ───────────────────────────────────────────
+// ── Supabase ───────────────────────────────────────────────────
 async function sbLoad(url, key, ch) {
-  if (!url || !key || !ch) return null;
+  if (!url||!key||!ch) return null;
   try {
-    const r = await fetch(
-      url + "/rest/v1/r00m_data?channel_key=eq." + encodeURIComponent(ch) + "&select=*",
-      {headers: {apikey: key, Authorization: "Bearer " + key}}
-    );
+    const r = await fetch(url+"/rest/v1/r00m_data?channel_key=eq."+encodeURIComponent(ch)+"&select=*",
+      {headers:{apikey:key, Authorization:"Bearer "+key}});
     const d = await r.json();
-    return Array.isArray(d) && d[0] ? d[0] : null;
+    return Array.isArray(d)&&d[0]?d[0]:null;
   } catch { return null; }
 }
-
 async function sbSave(url, key, ch, payload) {
-  if (!url || !key || !ch) return;
+  if (!url||!key||!ch) return;
   try {
-    await fetch(url + "/rest/v1/r00m_data", {
-      method: "POST",
-      headers: {
-        apikey: key,
-        Authorization: "Bearer " + key,
-        "Content-Type": "application/json",
-        Prefer: "resolution=merge-duplicates",
-      },
-      body: JSON.stringify({
-        channel_key: ch,
-        weeks: payload.weeks,
-        insight: payload.insight,
-        settings: payload.settings,
-        updated_at: new Date().toISOString(),
-      }),
+    await fetch(url+"/rest/v1/r00m_data", {
+      method:"POST",
+      headers:{apikey:key, Authorization:"Bearer "+key, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates"},
+      body:JSON.stringify({channel_key:ch, weeks:payload.weeks, insight:payload.insight, settings:payload.settings, updated_at:new Date().toISOString()}),
     });
   } catch {}
 }
 
 // ── Claude API ─────────────────────────────────────────────────
 async function claudeCall(messages, opts) {
-  const tools = opts && opts.tools;
-  const maxTokens = (opts && opts.maxTokens) || 1000;
+  const maxTokens = (opts&&opts.maxTokens)||1000;
   const body = {model:"claude-sonnet-4-20250514", max_tokens:maxTokens, messages};
-  if (tools) body.tools = tools;
   const r = await fetch("/api/claude", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(body),
+    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
   });
-  if (!r.ok) throw new Error("Claude " + r.status);
+  if (!r.ok) throw new Error("Claude "+r.status);
   return r.json();
 }
-
 function getText(d) {
-  return (d.content || []).filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("") || "";
+  return (d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("")||"";
 }
-
 function tryJSON(t) {
-  try { return JSON.parse(t.replace(/```json|```/g,"").trim()); }
-  catch { return null; }
-}
-
-async function fetchTrending(niche) {
-  const d = await claudeCall(
-    [{role:"user", content:"You are a YouTube Shorts trend analyst. Generate 8 specific trending topic ideas for faceless YouTube Shorts in the \"" + niche + "\" niche. Focus on topics that are currently popular, controversial, or have high search interest. Make each topic specific and clickable — not generic. Assign a heat score 70-99 based on estimated interest level. Return ONLY a valid JSON array, no other text:\n[{\"topic\":\"specific trending topic title\",\"heat\":95,\"source\":\"YouTube\"},...]"}],
-    {maxTokens:900}
-  );
-  return tryJSON(getText(d)) || [];
+  try { return JSON.parse(t.replace(/```json|```/g,"").trim()); } catch { return null; }
 }
 
 async function genScripts(slots, evolved) {
-  // slots is array of {topic, contentType} — each may have different topic
   const d = await claudeCall(
-    [{role:"user", content:"Write " + slots.length + " short-form faceless YouTube Shorts scripts. Each script must match its assigned topic and content type exactly.\n\nScripts to write:\n" + slots.map(function(s,i){return (i+1)+". Topic: \""+s.topic+"\" | Type: "+s.contentType;}).join("\n") + "\n\n" + (evolved ? "Style guidance: " + evolved + "\n\n" : "") + "Rules: max 60 words each, punchy sentences, strong hook first 8 sec, voiceover-ready.\n\nReturn ONLY a valid JSON array with exactly " + slots.length + " items:\n[{\"title\":\"video title\",\"type\":\"content type\",\"topic\":\"topic used\",\"script\":\"full script\",\"hook\":\"opening line only\",\"ytCaption\":\"YouTube caption with 3 hashtags\"}]"}],
+    [{role:"user", content:"Write "+slots.length+" short-form faceless YouTube Shorts scripts. Match each script exactly to its topic and content type.\n\nScripts:\n"+slots.map((s,i)=>(i+1)+". Topic: \""+s.topic+"\" | Type: "+s.contentType).join("\n")+"\n\n"+(evolved?"Style: "+evolved+"\n\n":"")+"Rules: max 60 words, punchy, strong hook first 8 sec.\n\nReturn ONLY valid JSON array:\n[{\"title\":\"title\",\"type\":\"type\",\"topic\":\"topic\",\"script\":\"script\",\"hook\":\"opening line\",\"ytCaption\":\"caption with 3 hashtags\"}]"}],
     {maxTokens:2000}
   );
-  return tryJSON(getText(d)) || [];
-}
-
-async function extractKW(script) {
-  const d = await claudeCall(
-    [{role:"user", content:"Extract 5 Pexels stock video search keywords from this script. Short, specific, searchable. Return ONLY a JSON array:\n[\"kw1\",\"kw2\",...]\n\nScript: \"" + script + "\""}],
-    {maxTokens:150}
-  );
-  return tryJSON(getText(d)) || [];
+  return tryJSON(getText(d))||[];
 }
 
 async function weeklyInsight(data, niche, prev) {
   const d = await claudeCall(
-    [{role:"user", content:"You are the intelligence engine for a faceless YouTube channel. Analyse this week.\n\nNiche: " + niche + "\nAnalytics: " + JSON.stringify(data) + "\nPrevious prompt: " + (prev || "none") + "\n\nReturn ONLY valid JSON:\n{\"summary\":\"2-3 sentence analysis\",\"topFormat\":\"best content type\",\"recommendation\":\"specific next week action\",\"evolvedPrompt\":\"improved script instructions\",\"nextNiches\":[\"top pick\",\"second\",\"third\"],\"adjustments\":[\"adj1\",\"adj2\",\"adj3\",\"adj4\"]}"}],
+    [{role:"user", content:"Intelligence engine for a faceless YouTube channel.\n\nNiche: "+niche+"\nAnalytics: "+JSON.stringify(data)+"\nPrevious prompt: "+(prev||"none")+"\n\nReturn ONLY valid JSON:\n{\"summary\":\"2-3 sentence analysis\",\"topFormat\":\"best content type\",\"recommendation\":\"specific next week action\",\"evolvedPrompt\":\"improved script instructions\",\"nextNiches\":[\"top\",\"second\",\"third\"],\"adjustments\":[\"a1\",\"a2\",\"a3\",\"a4\"]}"}],
     {maxTokens:900}
   );
-  return tryJSON(getText(d)) || {};
+  return tryJSON(getText(d))||{};
 }
 
-async function pexelsSearch(kw, key) {
-  if (!key) return [];
-  try {
-    const r = await fetch(
-      "https://api.pexels.com/videos/search?query=" + encodeURIComponent(kw) + "&per_page=4&orientation=portrait",
-      {headers:{Authorization:key}}
-    );
-    const d = await r.json();
-    return (d.videos || []).map(function(v) {
-      return {
-        id: v.id,
-        preview: v.image,
-        url: (v.video_files && v.video_files.find(function(f){return f.quality==="sd";})) ? v.video_files.find(function(f){return f.quality==="sd";}).link : (v.video_files && v.video_files[0] ? v.video_files[0].link : ""),
-        duration: v.duration,
-      };
-    });
-  } catch { return []; }
+// ── Video Generation (Canvas + MediaRecorder) ──────────────────
+function generateVideoBlob(slot) {
+  return new Promise((resolve, reject) => {
+    if (!window.MediaRecorder) { reject(new Error("MediaRecorder not supported — use Chrome")); return; }
+
+    const W = 720, H = 1280;
+    const canvas = document.createElement("canvas");
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    const accent = CTYPE_COLOR[slot.contentType] || "#ADFF2F";
+    const hook = (slot.script && slot.script.hook) || "";
+    const scriptText = (slot.script && slot.script.script) || "";
+    const title = (slot.script && slot.script.title) || "";
+    const allWords = scriptText.split(/\s+/).filter(w => w.length > 0);
+
+    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
+      ? "video/webm;codecs=vp8" : "video/webm";
+    const stream = canvas.captureStream(24);
+    const recorder = new MediaRecorder(stream, {mimeType, videoBitsPerSecond:1800000});
+    const chunks = [];
+
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+    recorder.onstop = () => resolve(new Blob(chunks, {type:"video/webm"}));
+    recorder.onerror = e => reject(e.error||new Error("Recording failed"));
+
+    let frameId = null;
+    let phase = "hook";
+    let wordIndex = 0;
+    let phaseStart = Date.now();
+    let lastWordTime = Date.now();
+    const MS_PER_WORD = 400;
+    const HOOK_DURATION = 2800;
+
+    function wrapText(text, maxW, font) {
+      ctx.font = font;
+      const words = text.split(" ");
+      const lines = [];
+      let cur = "";
+      for (const w of words) {
+        const test = cur ? cur+" "+w : w;
+        if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
+        else cur = test;
+      }
+      if (cur) lines.push(cur);
+      return lines;
+    }
+
+    function drawBg() {
+      ctx.fillStyle = "#08080E";
+      ctx.fillRect(0,0,W,H);
+      ctx.fillStyle = accent;
+      ctx.fillRect(0,0,W,6);
+      ctx.fillRect(0,H-6,W,6);
+    }
+
+    function drawHook() {
+      drawBg();
+      const elapsed = Date.now() - phaseStart;
+      const prog = Math.min(elapsed / HOOK_DURATION, 1);
+      const alpha = prog < 0.12 ? prog/0.12 : prog > 0.88 ? (1-prog)/0.12 : 1;
+      ctx.save(); ctx.globalAlpha = alpha;
+
+      ctx.font = "bold 32px 'Space Mono', monospace";
+      ctx.fillStyle = accent; ctx.textAlign = "center";
+      ctx.fillText("HOOK", W/2, H/2 - 160);
+
+      const lines = wrapText(hook, W-80, "bold 60px 'Syne', sans-serif");
+      ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center";
+      const lh = 78;
+      let y = H/2 - (lines.length*lh)/2 + 20;
+      lines.forEach(l => { ctx.font = "bold 60px 'Syne', sans-serif"; ctx.fillText(l,W/2,y); y+=lh; });
+
+      ctx.restore();
+    }
+
+    function drawScript() {
+      drawBg();
+      const shown = allWords.slice(0, wordIndex+1);
+      const recent = shown.slice(-10);
+      const display = recent.join(" ");
+      const progress = (wordIndex+1)/allWords.length;
+
+      // Progress bar
+      ctx.fillStyle = "#1A1A2A";
+      ctx.beginPath(); ctx.roundRect(50,100,W-100,8,4); ctx.fill();
+      ctx.fillStyle = accent;
+      ctx.beginPath(); ctx.roundRect(50,100,(W-100)*progress,8,4); ctx.fill();
+
+      // Type badge
+      ctx.font = "bold 28px 'Space Mono', monospace";
+      ctx.fillStyle = accent; ctx.textAlign = "center";
+      ctx.fillText(slot.contentType.toUpperCase(), W/2, 170);
+
+      // Main words
+      const fontSize = allWords.length > 40 ? 54 : 64;
+      const font = `bold ${fontSize}px 'Syne', sans-serif`;
+      const lines = wrapText(display, W-80, font);
+      const lh = fontSize*1.35;
+      let y = H/2 - (lines.length*lh)/2;
+      lines.forEach((l,i) => {
+        ctx.font = font; ctx.textAlign = "center";
+        ctx.fillStyle = i===lines.length-1 ? accent : "rgba(255,255,255,0.65)";
+        ctx.fillText(l, W/2, y); y+=lh;
+      });
+
+      // Title footer
+      ctx.font = "bold 26px 'Syne', sans-serif";
+      ctx.fillStyle = "rgba(255,255,255,0.25)";
+      ctx.textAlign = "center";
+      ctx.fillText(title.slice(0,42)+(title.length>42?"...":""), W/2, H-50);
+    }
+
+    function frame() {
+      const now = Date.now();
+      if (phase === "hook") {
+        drawHook();
+        if (now - phaseStart >= HOOK_DURATION) { phase="script"; lastWordTime=now; }
+      } else {
+        drawScript();
+        if (now - lastWordTime >= MS_PER_WORD) {
+          wordIndex++;
+          lastWordTime = now;
+          if (wordIndex >= allWords.length) {
+            setTimeout(() => { recorder.stop(); cancelAnimationFrame(frameId); }, 1200);
+            return;
+          }
+        }
+      }
+      frameId = requestAnimationFrame(frame);
+    }
+
+    recorder.start(100);
+    frame();
+  });
+}
+
+// ── YouTube Upload ─────────────────────────────────────────────
+async function uploadToYouTube(blob, slot, accessToken, publishAt) {
+  const title  = (slot.script && slot.script.title) || "Untitled";
+  const desc   = (slot.script && slot.script.ytCaption || "#Shorts") + "\n\n#Shorts";
+  const meta   = {
+    snippet:{ title, description:desc, tags:["shorts","#shorts"], categoryId:"22" },
+    status:{ privacyStatus:"private", publishAt, selfDeclaredMadeForKids:false },
+  };
+
+  // Resumable upload — handles any file size
+  const initR = await fetch(
+    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+    {
+      method:"POST",
+      headers:{
+        Authorization:"Bearer "+accessToken,
+        "Content-Type":"application/json",
+        "X-Upload-Content-Type":"video/webm",
+        "X-Upload-Content-Length":String(blob.size),
+      },
+      body:JSON.stringify(meta),
+    }
+  );
+  if (!initR.ok) {
+    const err = await initR.json();
+    throw new Error("YouTube init failed: "+(err.error&&err.error.message||initR.status));
+  }
+  const uploadUrl = initR.headers.get("Location");
+  if (!uploadUrl) throw new Error("No upload URL from YouTube");
+
+  const uploadR = await fetch(uploadUrl, {
+    method:"PUT",
+    headers:{"Content-Type":"video/webm", "Content-Length":String(blob.size)},
+    body:blob,
+  });
+  if (!uploadR.ok) throw new Error("YouTube upload failed: "+uploadR.status);
+  const data = await uploadR.json();
+  return data.id;
+}
+
+function buildPublishTime(day, timeStr, offsetDays) {
+  const DAY = {Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6};
+  const HRS  = {"7:00 AM":"07:00","1:00 PM":"13:00","6:00 PM":"18:00"};
+  const now  = new Date();
+  const target = new Date(now);
+  const diff = (DAY[day]||0) - now.getDay();
+  target.setDate(now.getDate() + ((diff+7)%7) + (offsetDays||7));
+  const [h,m] = (HRS[timeStr]||"07:00").split(":").map(Number);
+  target.setHours(h,m,0,0);
+  return target.toISOString();
 }
 
 // ── Shared UI ──────────────────────────────────────────────────
-function Tag(props) {
-  var color = props.color || "#ADFF2F";
-  return React.createElement("span", {style:{fontFamily:"Space Mono",fontSize:"10px",color:color,background:color+"18",border:"1px solid "+color+"44",padding:"3px 9px",borderRadius:"20px",letterSpacing:"0.05em"}}, props.children);
-}
-function Spinner(props) {
-  var size = props.size || 14;
-  return React.createElement("span", {style:{display:"inline-block",width:size,height:size,border:"2px solid #ADFF2F",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite",flexShrink:0}});
-}
-function SL(props) {
-  return React.createElement("div", {style:{fontFamily:"Space Mono",fontSize:"10px",color:props.color||"#555",letterSpacing:"0.1em",marginBottom:"12px"}}, props.children);
-}
-function Card(props) {
-  return React.createElement("div", {style:{background:"#111118",border:"1px solid "+(props.accent||"#1E1E2E"),borderRadius:"12px",padding:"18px",...(props.style||{})}}, props.children);
-}
-function StatBox(props) {
-  var accent = props.accent || "#ADFF2F";
-  return React.createElement("div", {style:{flex:1,minWidth:"90px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"10px",padding:"12px 14px"}},
-    React.createElement("div", {style:{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:accent,lineHeight:1}}, props.value),
-    React.createElement("div", {style:{fontSize:"11px",color:"#888",fontWeight:600,marginTop:"5px"}}, props.label),
-    props.sub ? React.createElement("div", {style:{fontFamily:"Space Mono",fontSize:"10px",color:"#444",marginTop:"2px"}}, props.sub) : null
-  );
-}
-function Btn(props) {
-  var variant = props.variant || "primary";
-  var look = {
-    primary: {background:props.disabled?"#1c1c28":"#ADFF2F", color:props.disabled?"#444":"#08080E", border:"none"},
-    outline:  {background:"transparent", color:"#ADFF2F", border:"1px solid #ADFF2F55"},
-    danger:   {background:"transparent", color:"#FF2D6B", border:"1px solid #FF2D6B44"},
-    ghost:    {background:"#111118",     color:"#888",    border:"1px solid #1E1E2E"},
-    green:    {background:"#0D1A0D",     color:"#ADFF2F", border:"1px solid #ADFF2F44"},
-  }[variant] || {};
-  return React.createElement("button", {
-    onClick:props.onClick, disabled:props.disabled,
-    style:{...look,fontFamily:"Syne",fontWeight:700,fontSize:props.small?"12px":"14px",padding:props.small?"7px 14px":"11px 22px",borderRadius:"8px",cursor:props.disabled?"not-allowed":"pointer",transition:"all .15s",width:props.full?"100%":undefined,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:"6px"},
-  }, props.children);
-}
-
-function ZoneCard(props) {
-  var done = props.frozen && props.status !== "live";
-  var cfgMap = {
-    live:      {label:"LIVE",  bg:"#0A1A0A", border:"#ADFF2F", dot:"#ADFF2F", pulse:true},
-    draft:     {label:"DRAFT", bg:"#1A1200", border:"#FF6B35", dot:"#FF6B35", pulse:false},
-    intention: {label:"OPEN",  bg:"#111118", border:"#1E1E2E", dot:"#333",    pulse:false},
-    done:      {label:"DONE",  bg:"#0d0d0d", border:"#1a1a1a", dot:"#222",    pulse:false},
-  };
-  var cfg = cfgMap[done ? "done" : props.status] || cfgMap.intention;
-  return (
-    <div onClick={!done && props.status !== "live" ? props.onClick : undefined}
-      style={{background:cfg.bg, border:"1px solid "+(props.selected?"#ADFF2F":cfg.border), borderRadius:"12px", padding:"12px", minHeight:"84px", cursor:done||props.status==="live"?"default":"pointer", opacity:done?0.4:1, transition:"all .2s", outline:props.selected?"2px solid #ADFF2F22":"none"}}>
-      <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
-        <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444"}}>WK {props.week}</span>
-        <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:cfg.dot,...(cfg.pulse?{animation:"pulse 2s infinite"}:{})}}/>
-          <span style={{fontFamily:"Space Mono",fontSize:"9px",color:cfg.dot}}>{cfg.label}</span>
-        </div>
-      </div>
-      <div style={{fontWeight:700,fontSize:"13px",color:done?"#333":"#E8E8F0",marginBottom:"5px",lineHeight:1.3}}>{props.niche||"Plan this week"}</div>
-      {props.score!=null && <div style={{fontFamily:"Space Mono",fontSize:"14px",color:"#ADFF2F"}}>{props.score}<span style={{fontSize:"10px",color:"#555"}}>/100</span></div>}
-      {props.status==="intention"&&!done && <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#333",marginTop:"3px"}}>tap to plan</div>}
-    </div>
-  );
-}
+function Tag(p){const c=p.color||"#ADFF2F";return <span style={{fontFamily:"Space Mono",fontSize:"10px",color:c,background:c+"18",border:"1px solid "+c+"44",padding:"3px 9px",borderRadius:"20px",letterSpacing:"0.05em"}}>{p.children}</span>;}
+function Spinner(p){const s=p.size||14;return <span style={{display:"inline-block",width:s,height:s,border:"2px solid #ADFF2F",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite",flexShrink:0}}/>;}
+function SL(p){return <div style={{fontFamily:"Space Mono",fontSize:"10px",color:p.color||"#555",letterSpacing:"0.1em",marginBottom:"12px"}}>{p.children}</div>;}
+function Card(p){return <div style={{background:"#111118",border:"1px solid "+(p.accent||"#1E1E2E"),borderRadius:"12px",padding:"18px",...(p.style||{})}}>{p.children}</div>;}
+function StatBox(p){const a=p.accent||"#ADFF2F";return <div style={{flex:1,minWidth:"90px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:a,lineHeight:1}}>{p.value}</div><div style={{fontSize:"11px",color:"#888",fontWeight:600,marginTop:"5px"}}>{p.label}</div>{p.sub&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444",marginTop:"2px"}}>{p.sub}</div>}</div>;}
+function Btn(p){const v=p.variant||"primary";const look={primary:{background:p.disabled?"#1c1c28":"#ADFF2F",color:p.disabled?"#444":"#08080E",border:"none"},outline:{background:"transparent",color:"#ADFF2F",border:"1px solid #ADFF2F55"},danger:{background:"transparent",color:"#FF2D6B",border:"1px solid #FF2D6B44"},ghost:{background:"#111118",color:"#888",border:"1px solid #1E1E2E"},green:{background:"#0D1A0D",color:"#ADFF2F",border:"1px solid #ADFF2F44"},orange:{background:"#1A0A00",color:"#FF6B35",border:"1px solid #FF6B3544"}}[v]||{};return <button onClick={p.onClick} disabled={p.disabled} style={{...look,fontFamily:"Syne",fontWeight:700,fontSize:p.small?"12px":"14px",padding:p.small?"7px 14px":"11px 22px",borderRadius:"8px",cursor:p.disabled?"not-allowed":"pointer",transition:"all .15s",width:p.full?"100%":undefined,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>{p.children}</button>;}
+function ZoneCard(p){const done=p.frozen&&p.status!=="live";const cfg={live:{label:"LIVE",bg:"#0A1A0A",border:"#ADFF2F",dot:"#ADFF2F",pulse:true},draft:{label:"DRAFT",bg:"#1A1200",border:"#FF6B35",dot:"#FF6B35",pulse:false},intention:{label:"OPEN",bg:"#111118",border:"#1E1E2E",dot:"#333",pulse:false},done:{label:"DONE",bg:"#0d0d0d",border:"#1a1a1a",dot:"#222",pulse:false}}[done?"done":p.status]||{};return <div onClick={!done&&p.status!=="live"?p.onClick:undefined} style={{background:cfg.bg,border:"1px solid "+(p.selected?"#ADFF2F":cfg.border),borderRadius:"12px",padding:"12px",minHeight:"84px",cursor:done||p.status==="live"?"default":"pointer",opacity:done?0.4:1,transition:"all .2s",outline:p.selected?"2px solid #ADFF2F22":"none"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}><span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444"}}>WK {p.week}</span><div style={{display:"flex",alignItems:"center",gap:"4px"}}><div style={{width:6,height:6,borderRadius:"50%",background:cfg.dot,...(cfg.pulse?{animation:"pulse 2s infinite"}:{})}}/>  <span style={{fontFamily:"Space Mono",fontSize:"9px",color:cfg.dot}}>{cfg.label}</span></div></div><div style={{fontWeight:700,fontSize:"13px",color:done?"#333":"#E8E8F0",marginBottom:"5px",lineHeight:1.3}}>{p.niche||"Plan this week"}</div>{p.score!=null&&<div style={{fontFamily:"Space Mono",fontSize:"14px",color:"#ADFF2F"}}>{p.score}<span style={{fontSize:"10px",color:"#555"}}>/100</span></div>}{p.status==="intention"&&!done&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#333",marginTop:"3px"}}>tap to plan</div>}</div>;}
 
 // ── Command Center ─────────────────────────────────────────────
-function CommandCenter({weeks, onNavigate, instagramEnabled}) {
-  const live  = weeks.find(w => w.status === "live");
-  const draft = weeks.find(w => w.status === "draft" && w.slots && w.slots.length > 0);
-  const open  = weeks.find(w => w.status === "intention");
-  const pending   = draft ? draft.slots.filter(s => s.status === "pending").length : 0;
-  const scheduled = draft ? draft.slots.filter(s => s.scheduleStatus === "youtube_done").length : 0;
-
-  const nextAction = !live && !draft
-    ? {msg:"Start here: Planner → pick a niche → lock Week 1", tab:"planner"}
-    : !draft
-      ? {msg:"Planner → lock Week " + (open ? open.id : 2), tab:"planner"}
-      : pending > 0
-        ? {msg:"Content Engine → generate " + pending + " scripts for Week " + draft.id, tab:"engine"}
-        : scheduled < 21
-          ? {msg:"Content Engine → run pipeline → upload " + (21 - scheduled) + " remaining", tab:"engine"}
-          : {msg:"All done. Check back Sunday for analytics.", tab:null};
-
-  const steps = [
-    {s:live?"done":"pending", t:"Week 1", text:live?"Week "+live.id+" live — "+live.niche:"Lock Week 1 in Planner to begin"},
-    {s:draft?"done":live?"active":"pending", t:"Next", text:draft?"Week "+draft.id+" drafted — "+draft.niche:"Lock next week in Planner"},
-    {s:pending===0&&draft?"done":"pending", t:"Scripts", text:"Scripts: "+(draft?(21-pending)+"/21":"0/21")},
-    {s:scheduled>0?"done":"pending", t:"YouTube", text:"YouTube scheduled: "+scheduled+"/21"},
-    {s:"pending", t:"Sunday", text:"Analytics in → engine evolves → next niche recommended"},
+function CommandCenter({weeks, onNavigate}) {
+  const live  = weeks.find(w=>w.status==="live");
+  const draft = weeks.find(w=>w.status==="draft"&&w.slots&&w.slots.length>0);
+  const open  = weeks.find(w=>w.status==="intention");
+  const pending   = draft?draft.slots.filter(s=>s.status==="pending").length:0;
+  const videoDone = draft?draft.slots.filter(s=>s.scheduleStatus==="youtube_done").length:0;
+  const nextAction = !live&&!draft?{msg:"Start: Planner → pick niche + topics → lock Week 1",tab:"planner"}:!draft?{msg:"Planner → lock Week "+(open?open.id:2),tab:"planner"}:pending>0?{msg:"Content Engine → generate "+pending+" scripts",tab:"engine"}:videoDone<21?{msg:"Content Engine → generate videos → upload to YouTube",tab:"engine"}:{msg:"All done. Check back Sunday for analytics.",tab:null};
+  const steps=[
+    {s:live?"done":"pending",t:"Wk1",text:live?"Week "+live.id+" live — "+live.niche:"Lock Week 1 in Planner"},
+    {s:draft?"done":live?"active":"pending",t:"Next",text:draft?"Week "+draft.id+" drafted":"Lock next week"},
+    {s:pending===0&&draft?"done":"pending",t:"Scripts",text:"Scripts: "+(draft?(21-pending)+"/21":"0/21")},
+    {s:videoDone>0?"done":"pending",t:"Videos",text:"Videos generated & on YouTube: "+videoDone+"/21"},
+    {s:"pending",t:"Sunday",text:"Analytics → engine evolves → next niche"},
   ];
-
   return (
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
       <div>
@@ -311,61 +372,30 @@ function CommandCenter({weeks, onNavigate, instagramEnabled}) {
           <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",letterSpacing:"0.08em"}}>ENGINE READY</span>
         </div>
         <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Command Center</h2>
-        <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>
-          {live ? "Week "+live.id+" live — "+live.niche : draft ? "Week "+draft.id+" in draft — "+draft.niche : "No weeks planned yet — start in Planner"}
-        </p>
+        <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>{live?"Week "+live.id+" live — "+live.niche:draft?"Week "+draft.id+" drafting":"No weeks planned — start in Planner"}</p>
       </div>
-
       <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-        <StatBox label="Live Score"    value={live ? (live.score || "—") : "—"} sub="live week"/>
-        <StatBox label="Scripts Done"  value={(21-pending)+"/21"} sub={"wk "+(draft?draft.id:"—")} accent="#FF6B35"/>
-        <StatBox label="YT Scheduled"  value={scheduled+"/21"} sub="this draft" accent="#00CFFF"/>
-        <StatBox label="Weeks Open"    value={weeks.filter(w=>w.status==="intention").length} sub="to plan" accent="#B06EF3"/>
+        <StatBox label="Scripts" value={(21-pending)+"/21"} sub="generated" accent="#FF6B35"/>
+        <StatBox label="Videos on YT" value={videoDone+"/21"} sub="uploaded" accent="#ADFF2F"/>
+        <StatBox label="Weeks Open" value={weeks.filter(w=>w.status==="intention").length} sub="to plan" accent="#B06EF3"/>
+        <StatBox label="Live Score" value={live?(live.score||"—"):"—"} sub="this week" accent="#00CFFF"/>
       </div>
-
       <div>
         <SL>ROLLING RUNWAY</SL>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>
-          {weeks.map(w => (
-            <ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen}
-              onClick={() => onNavigate(w.status==="intention" ? "planner" : "engine")}/>
-          ))}
+          {weeks.map(w=><ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen} onClick={()=>onNavigate(w.status==="intention"?"planner":"engine")}/>)}
         </div>
       </div>
-
-      {!live && !draft && (
-        <div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"12px",padding:"16px"}}>
-          <SL color="#ADFF2F">HOW TO START</SL>
-          {["1. Go to Planner → enter your niche (e.g. Personal Finance, AI Tools)",
-            "2. Search for trending topics → pick one",
-            "3. Select content type mix → Lock Week 1",
-            "4. Go to Content Engine → generate all 21 scripts",
-            "5. Export jobs → run Python pipeline → upload to YouTube"
-          ].map((s,i) => <div key={i} style={{fontSize:"13px",color:"#888",marginBottom:"4px"}}>{s}</div>)}
-        </div>
-      )}
-
+      {!live&&!draft&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"12px",padding:"16px"}}><SL color="#ADFF2F">HOW TO START</SL>{["1. Planner → enter niche → search topics → lock Week 1","2. Content Engine → generate all 21 scripts","3. Content Engine → generate videos (browser does it)","4. Upload all to YouTube with one tap"].map((s,i)=><div key={i} style={{fontSize:"13px",color:"#888",marginBottom:"4px"}}>{s}</div>)}</div>}
       <Card>
         <SL>PIPELINE STATUS</SL>
-        {steps.map((step, i) => {
-          const dc = step.s==="done" ? "#ADFF2F" : step.s==="active" ? "#FF6B35" : "#2a2a3a";
-          return (
-            <div key={i} style={{display:"flex",gap:"12px",alignItems:"flex-start",marginBottom:"10px"}}>
-              <div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,marginTop:"2px",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+dc,background:dc+"18",fontSize:"9px",color:dc,...(step.s==="active"?{animation:"pulse 2s infinite"}:{})}}>
-                {step.s==="done" ? "✓" : step.s==="active" ? "◉" : "○"}
-              </div>
-              <div style={{flex:1,fontSize:"13px",color:step.s==="pending"?"#444":"#CCC"}}>{step.text}</div>
-              <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#333",flexShrink:0}}>{step.t}</span>
-            </div>
-          );
-        })}
+        {steps.map((step,i)=>{const dc=step.s==="done"?"#ADFF2F":step.s==="active"?"#FF6B35":"#2a2a3a";return <div key={i} style={{display:"flex",gap:"12px",alignItems:"flex-start",marginBottom:"10px"}}><div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,marginTop:"2px",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+dc,background:dc+"18",fontSize:"9px",color:dc,...(step.s==="active"?{animation:"pulse 2s infinite"}:{})}}>{step.s==="done"?"✓":step.s==="active"?"◉":"○"}</div><div style={{flex:1,fontSize:"13px",color:step.s==="pending"?"#444":"#CCC"}}>{step.text}</div><span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#333",flexShrink:0}}>{step.t}</span></div>;})}
       </Card>
-
       <div style={{background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"12px",padding:"14px 16px"}}>
-        <SL color="#ADFF2F">YOUR NEXT ACTION</SL>
+        <SL color="#ADFF2F">NEXT ACTION</SL>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px",flexWrap:"wrap"}}>
           <p style={{fontSize:"14px",color:"#CCC",flex:1}}>{nextAction.msg}</p>
-          {nextAction.tab && <Btn small variant="green" onClick={() => onNavigate(nextAction.tab)}>Go</Btn>}
+          {nextAction.tab&&<Btn small variant="green" onClick={()=>onNavigate(nextAction.tab)}>Go</Btn>}
         </div>
       </div>
     </div>
@@ -374,519 +404,295 @@ function CommandCenter({weeks, onNavigate, instagramEnabled}) {
 
 // ── Weekly Planner ─────────────────────────────────────────────
 function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
-  const firstOpen = weeks.find(x => x.status === "intention");
-  const [selWeek,  setSelWeek]  = useState(firstOpen ? firstOpen.id : 1);
-  const [niche,    setNiche]    = useState("");
-  const [trending, setTrending] = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [trendErr, setTrendErr] = useState("");
-  const [topics,   setTopics]   = useState(["", "", ""]);  // 3 topic slots
-  const [selTypes, setSelTypes] = useState(["cliffhanger","explanatory"]);
-  const [usedRec,  setUsedRec]  = useState(false);
+  const firstOpen = weeks.find(x=>x.status==="intention");
+  const [selWeek, setSelWeek] = useState(firstOpen?firstOpen.id:1);
+  const [niche,   setNiche]   = useState("");
+  const [trending,setTrending]= useState([]);
+  const [loading, setLoading] = useState(false);
+  const [trendErr,setTrendErr]= useState("");
+  const [topics,  setTopics]  = useState(["","",""]);
+  const [selTypes,setSelTypes]= useState(["cliffhanger","explanatory"]);
+  const [usedRec, setUsedRec] = useState(false);
+  const week = weeks.find(w=>w.id===selWeek);
+  const hasRecs = lastInsight&&lastInsight.nextNiches&&lastInsight.nextNiches.length>0;
+  const validTopics = topics.filter(t=>t.trim().length>0);
+  const canLock = validTopics.length>0&&selTypes.length>0&&niche.trim().length>0;
+  const slotsPerTopic = validTopics.length>0?Math.ceil(21/validTopics.length):7;
 
-  const week = weeks.find(w => w.id === selWeek);
-  const hasRecs = lastInsight && lastInsight.nextNiches && lastInsight.nextNiches.length > 0;
-  const validTopics = topics.filter(t => t.trim().length > 0);
-  const canLock = validTopics.length > 0 && selTypes.length > 0 && niche.trim().length > 0;
-
-  const applyRec = (n) => { setNiche(n); setUsedRec(true); };
-
-  const doSearch = async () => {
-    if (!niche.trim()) { setTrendErr("Enter a niche first"); return; }
-    setTrendErr(""); setLoading(true); setTrending([]);
-    try {
-      const d = await claudeCall(
-        [{role:"user", content:"You are a YouTube Shorts trend analyst. Generate 8 specific trending topic ideas for faceless YouTube Shorts in the \"" + niche.trim() + "\" niche. Focus on topics that are currently popular, controversial, or have high search interest. Make each topic specific and clickable. Assign a heat score 70-99. Return ONLY a valid JSON array:\n[{\"topic\":\"specific topic title\",\"heat\":95,\"source\":\"YouTube\"},...]"}],
-        {maxTokens:900}
-      );
-      const t = tryJSON(getText(d)) || [];
-      if (t.length) { setTrending(t); } else { setTrendErr("No results — try a more specific niche e.g. AI Tools, Personal Finance"); }
-    } catch { setTrendErr("Search failed — check connection"); }
+  const doSearch = async()=>{
+    if(!niche.trim()){setTrendErr("Enter a niche first");return;}
+    setTrendErr("");setLoading(true);setTrending([]);
+    try{
+      const d=await claudeCall([{role:"user",content:"Generate 8 specific trending YouTube Shorts topic ideas for the \""+niche.trim()+"\" niche. Make each topic specific, clickable, and with high viral potential. Assign a heat score 70-99. Return ONLY valid JSON:\n[{\"topic\":\"specific topic\",\"heat\":95,\"source\":\"YouTube\"},...]"}],{maxTokens:900});
+      const t=tryJSON(getText(d))||[];
+      if(t.length){setTrending(t);}else{setTrendErr("Try a more specific niche like 'AI Tools' or 'Personal Finance'");}
+    }catch{setTrendErr("Search failed — check connection");}
     setLoading(false);
   };
 
-  const setTopic = (idx, val) => {
-    const updated = [...topics];
-    updated[idx] = val;
-    setTopics(updated);
+  const setTopic=(idx,val)=>{const u=[...topics];u[idx]=val;setTopics(u);};
+  const pickTrending=(topicText)=>{const empty=topics.findIndex(t=>t.trim()==="");const target=empty>=0?empty:2;const u=[...topics];u[target]=topicText;setTopics(u);};
+  const toggleType=id=>setSelTypes(p=>p.includes(id)?p.filter(t=>t!==id):[...p,id]);
+
+  const lockWeek=()=>{
+    if(!canLock)return;
+    const filled=validTopics;
+    const isFirst=weeks.filter(x=>x.status==="live").length===0;
+    setWeeks(prev=>prev.map(w=>w.id===selWeek?{...w,status:isFirst?"live":"draft",frozen:isFirst,niche:niche.trim(),topic:filled[0],topics:filled,contentTypes:selTypes,slots:makeSlots(selTypes,filled)}:w));
+    setTopics(["","",""]);setNiche("");setTrending([]);setUsedRec(false);
   };
-
-  const pickTrending = (idx, topicText) => {
-    const updated = [...topics];
-    // Fill the first empty slot, or the slot at idx
-    const emptyIdx = topics.findIndex(t => t.trim() === "");
-    const target = emptyIdx >= 0 ? emptyIdx : idx % 3;
-    updated[target] = topicText;
-    setTopics(updated);
-  };
-
-  const toggleType = (id) => setSelTypes(p => p.includes(id) ? p.filter(t => t !== id) : [...p, id]);
-
-  const lockWeek = () => {
-    if (!canLock) return;
-    const filled = validTopics;
-    const isFirst = weeks.filter(x => x.status === "live").length === 0;
-    setWeeks(prev => prev.map(w => w.id === selWeek ? {
-      ...w,
-      status: isFirst ? "live" : "draft",
-      frozen: isFirst,
-      niche: niche.trim(),
-      topic: filled[0],   // primary topic for display
-      topics: filled,     // all topics
-      contentTypes: selTypes,
-      slots: makeSlots(selTypes, filled),
-    } : w));
-    setTopics(["","",""]); setNiche(""); setTrending([]); setUsedRec(false);
-  };
-
-  const slotsPerTopic = validTopics.length > 0 ? Math.ceil(21 / validTopics.length) : 7;
 
   return (
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div>
-        <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Weekly Planner</h2>
-        <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>One niche · Multiple topics · 21 videos · Rolling runway</p>
-      </div>
-
+      <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Weekly Planner</h2><p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>One niche · Multiple topics · 21 videos · Rolling runway</p></div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>
-        {weeks.map(w => (
-          <ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen}
-            selected={selWeek === w.id} onClick={() => setSelWeek(w.id)}/>
-        ))}
+        {weeks.map(w=><ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen} selected={selWeek===w.id} onClick={()=>setSelWeek(w.id)}/>)}
       </div>
-
-      {week && (week.status === "live" || week.status === "draft") && !week.frozen && (
-        <Card accent="#FF6B3544">
-          <SL color="#FF6B35">WEEK {selWeek} LOCKED — {week.slots ? week.slots.length : 0} SLOTS READY</SL>
-          <p style={{fontSize:"13px",color:"#888",marginBottom:"10px"}}>Go to <strong style={{color:"#ADFF2F"}}>Content Engine</strong> to generate scripts.</p>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            <Tag color="#FF6B35">{week.niche}</Tag>
-            {week.topics && week.topics.map((t,i) => <Tag key={i} color="#00CFFF">{t.slice(0,28)}{t.length>28?"...":""}</Tag>)}
-          </div>
-        </Card>
-      )}
-
-      {week && week.frozen && (
-        <Card accent="#ADFF2F33">
-          <SL color="#ADFF2F">WEEK {selWeek} — LIVE AND PUBLISHING</SL>
-          <p style={{fontSize:"13px",color:"#888",lineHeight:1.75}}>Publishing automatically 3x/day. Analytics from this week feed the engine for future recommendations.</p>
-        </Card>
-      )}
-
-      {week && week.status === "intention" && (
-        <Card style={{display:"flex",flexDirection:"column",gap:"20px"}}>
-          <div style={{fontWeight:700,fontSize:"16px"}}>
-            Planning Week {selWeek}{weeks.filter(x=>x.status==="live").length===0 ? " — This becomes your live Week 1" : ""}
-          </div>
-
-          {hasRecs && (
-            <div style={{background:"#070712",border:"1px solid #00CFFF22",borderRadius:"12px",padding:"14px"}}>
-              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}>
-                <div style={{width:22,height:22,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#00CFFF"}}>◈</div>
-                <SL color="#00CFFF">ENGINE RECOMMENDS — FROM YOUR ANALYTICS</SL>
-              </div>
-              <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                {lastInsight.nextNiches.map((n,i) => (
-                  <button key={i} onClick={() => applyRec(n)}
-                    style={{background:usedRec&&niche===n?"#0D1A0D":"#0A0A12",border:"1px solid "+(usedRec&&niche===n?"#ADFF2F":i===0?"#FF6B3566":"#1A1A2A"),color:i===0?"#FF6B35":"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:i===0?700:400,fontSize:"13px",cursor:"pointer"}}>
-                    {i===0 && "★ "}{n}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!hasRecs && (
-            <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"12px"}}>
-              <p style={{fontFamily:"Space Mono",fontSize:"11px",color:"#444",lineHeight:1.7}}>Engine recommendations appear here after your first analytics run.</p>
-            </div>
-          )}
-
-          {/* Step 1 — Niche */}
-          <div>
-            <SL>STEP 1 — NICHE</SL>
-            <input value={niche} onChange={e => { setNiche(e.target.value); setUsedRec(false); }}
-              placeholder="e.g. AI Tools, Personal Finance, True Crime..."
-              style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/>
-          </div>
-
-          {/* Step 2 — Topics */}
-          <div>
-            <SL>STEP 2 — PICK UP TO 3 TOPICS</SL>
-            <div style={{fontSize:"12px",color:"#555",marginBottom:"10px",fontFamily:"Space Mono"}}>
-              {slotsPerTopic} videos per topic · {validTopics.length} topic{validTopics.length!==1?"s":""} selected · {validTopics.length*slotsPerTopic} of 21 slots filled
-            </div>
-
-            {/* 3 topic input slots */}
-            {[0,1,2].map(idx => (
-              <div key={idx} style={{marginBottom:"8px"}}>
-                <div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"4px"}}>
-                  TOPIC {idx+1} {idx===0?"(required)":"(optional)"} — ~{slotsPerTopic} videos
-                </div>
-                <input
-                  value={topics[idx]}
-                  onChange={e => setTopic(idx, e.target.value)}
-                  placeholder={idx===0?"Enter your main topic...":idx===1?"Enter a second angle (optional)...":"Enter a third angle (optional)..."}
-                  style={{width:"100%",background:topics[idx]?"#0D1A0D":"#0A0A12",border:"1px solid "+(topics[idx]?"#ADFF2F44":"#1E1E2E"),borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px",transition:"all .2s"}}/>
-              </div>
-            ))}
-
-            {/* Trending search */}
-            <div style={{marginTop:"12px"}}>
-              <div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"8px"}}>OR SEARCH FOR TRENDING TOPICS TO FILL THE SLOTS ABOVE</div>
-              <Btn variant="outline" small onClick={doSearch}>
-                {loading ? <><Spinner size={12}/>Searching...</> : "Search Trending Topics"}
-              </Btn>
-              {trendErr && <div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"8px"}}>{trendErr}</div>}
-            </div>
-
-            {trending.length > 0 && (
-              <div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"5px"}}>
-                <div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"4px"}}>TAP A TOPIC TO ADD IT TO YOUR SLOTS ABOVE</div>
-                {trending.map((t,i) => {
-                  const alreadyAdded = topics.some(tp => tp === t.topic);
-                  return (
-                    <div key={i}
-                      onClick={() => !alreadyAdded && pickTrending(i, t.topic)}
-                      style={{display:"flex",alignItems:"center",gap:"10px",padding:"9px 12px",borderRadius:"8px",cursor:alreadyAdded?"default":"pointer",background:alreadyAdded?"#0D1A0D":"#0A0A12",border:"1px solid "+(alreadyAdded?"#ADFF2F44":"#1A1A2A"),opacity:alreadyAdded?0.6:1,transition:"all .15s"}}>
-                      <div style={{fontFamily:"Space Mono",fontSize:"12px",fontWeight:700,width:26,flexShrink:0,color:t.heat>92?"#FF2D6B":t.heat>87?"#FF6B35":"#ADFF2F"}}>{t.heat}</div>
-                      <div style={{flex:1,fontSize:"13px"}}>{t.topic}</div>
-                      <div style={{fontFamily:"Space Mono",fontSize:"9px",color:alreadyAdded?"#ADFF2F":"#444"}}>{alreadyAdded?"✓ added":t.source||t.src}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Step 3 — Content types */}
-          <div>
-            <SL>STEP 3 — CONTENT TYPE MIX</SL>
-            <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"8px"}}>
-              {CTYPES.map(ct => (
-                <button key={ct.id} onClick={() => toggleType(ct.id)}
-                  style={{background:selTypes.includes(ct.id)?ct.color+"22":"#0A0A12",border:"1px solid "+(selTypes.includes(ct.id)?ct.color:"#1E1E2E"),color:selTypes.includes(ct.id)?ct.color:"#555",padding:"6px 12px",borderRadius:"20px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",transition:"all .15s"}}>
-                  {ct.label}
-                </button>
-              ))}
-            </div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444"}}>
-              21 videos · {selTypes.length} format{selTypes.length!==1?"s":""} · distributed across {validTopics.length||1} topic{validTopics.length!==1?"s":""}
-            </div>
-          </div>
-
-          {/* Summary before locking */}
-          {canLock && (
-            <div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"10px",padding:"12px 14px"}}>
-              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>WEEK {selWeek} SUMMARY</div>
-              <div style={{fontSize:"13px",color:"#888",lineHeight:1.8}}>
-                <div>Niche: <strong style={{color:"#E8E8F0"}}>{niche}</strong></div>
-                {validTopics.map((t,i) => <div key={i}>Topic {i+1}: <strong style={{color:"#E8E8F0"}}>{t}</strong> — {slotsPerTopic} videos</div>)}
-                <div>Formats: <strong style={{color:"#E8E8F0"}}>{selTypes.join(", ")}</strong></div>
-              </div>
-            </div>
-          )}
-
-          <Btn onClick={lockWeek} disabled={!canLock}>
-            Lock Week {selWeek} and Start
-          </Btn>
-        </Card>
-      )}
+      {week&&(week.status==="live"||week.status==="draft")&&!week.frozen&&<Card accent="#FF6B3544"><SL color="#FF6B35">WEEK {selWeek} LOCKED</SL><p style={{fontSize:"13px",color:"#888",marginBottom:"10px"}}>Go to <strong style={{color:"#ADFF2F"}}>Content Engine</strong> to generate scripts and videos.</p><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}><Tag color="#FF6B35">{week.niche}</Tag>{(week.topics||[]).map((t,i)=><Tag key={i} color="#00CFFF">{t.slice(0,28)}</Tag>)}</div></Card>}
+      {week&&week.frozen&&<Card accent="#ADFF2F33"><SL color="#ADFF2F">WEEK {selWeek} — LIVE</SL><p style={{fontSize:"13px",color:"#888",lineHeight:1.75}}>Publishing automatically 3x/day.</p></Card>}
+      {week&&week.status==="intention"&&<Card style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+        <div style={{fontWeight:700,fontSize:"16px"}}>Planning Week {selWeek}{weeks.filter(x=>x.status==="live").length===0?" — This becomes your live Week 1":""}</div>
+        {hasRecs&&<div style={{background:"#070712",border:"1px solid #00CFFF22",borderRadius:"12px",padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#00CFFF"}}>◈</div><SL color="#00CFFF">ENGINE RECOMMENDS</SL></div><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{lastInsight.nextNiches.map((n,i)=><button key={i} onClick={()=>{setNiche(n);setUsedRec(true);}} style={{background:usedRec&&niche===n?"#0D1A0D":"#0A0A12",border:"1px solid "+(usedRec&&niche===n?"#ADFF2F":i===0?"#FF6B3566":"#1A1A2A"),color:i===0?"#FF6B35":"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:i===0?700:400,fontSize:"13px",cursor:"pointer"}}>{i===0&&"★ "}{n}</button>)}</div></div>}
+        {!hasRecs&&<div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"12px"}}><p style={{fontFamily:"Space Mono",fontSize:"11px",color:"#444",lineHeight:1.7}}>Engine recommendations appear after your first analytics run.</p></div>}
+        <div><SL>STEP 1 — NICHE</SL><input value={niche} onChange={e=>{setNiche(e.target.value);setUsedRec(false);}} placeholder="e.g. AI Tools, Personal Finance, True Crime..." style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/></div>
+        <div>
+          <SL>STEP 2 — TOPICS (up to 3, ~{slotsPerTopic} videos each)</SL>
+          {[0,1,2].map(idx=><div key={idx} style={{marginBottom:"8px"}}><div style={{fontSize:"11px",color:"#555",fontFamily:"Space Mono",marginBottom:"3px"}}>TOPIC {idx+1} {idx===0?"(required)":"(optional)"}</div><input value={topics[idx]} onChange={e=>setTopic(idx,e.target.value)} placeholder={idx===0?"Main topic...":idx===1?"Second angle (optional)...":"Third angle (optional)..."} style={{width:"100%",background:topics[idx]?"#0D1A0D":"#0A0A12",border:"1px solid "+(topics[idx]?"#ADFF2F44":"#1E1E2E"),borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px",transition:"all .2s"}}/></div>)}
+          <div style={{marginTop:"10px"}}><Btn variant="outline" small onClick={doSearch}>{loading?<><Spinner size={12}/>Searching...</>:"Search Trending Topics"}</Btn></div>
+          {trendErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"8px"}}>{trendErr}</div>}
+          {trending.length>0&&<div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"4px"}}>{trending.map((t,i)=>{const added=topics.some(tp=>tp===t.topic);return <div key={i} onClick={()=>!added&&pickTrending(t.topic)} style={{display:"flex",alignItems:"center",gap:"10px",padding:"8px 12px",borderRadius:"8px",cursor:added?"default":"pointer",background:added?"#0D1A0D":"#0A0A12",border:"1px solid "+(added?"#ADFF2F44":"#1A1A2A"),opacity:added?0.7:1}}><div style={{fontFamily:"Space Mono",fontSize:"12px",fontWeight:700,width:26,flexShrink:0,color:t.heat>92?"#FF2D6B":t.heat>87?"#FF6B35":"#ADFF2F"}}>{t.heat}</div><div style={{flex:1,fontSize:"13px"}}>{t.topic}</div><div style={{fontFamily:"Space Mono",fontSize:"9px",color:added?"#ADFF2F":"#444"}}>{added?"✓":t.source}</div></div>;})}</div>}
+        </div>
+        <div>
+          <SL>STEP 3 — CONTENT TYPE MIX</SL>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"8px"}}>{CTYPES.map(ct=><button key={ct.id} onClick={()=>toggleType(ct.id)} style={{background:selTypes.includes(ct.id)?ct.color+"22":"#0A0A12",border:"1px solid "+(selTypes.includes(ct.id)?ct.color:"#1E1E2E"),color:selTypes.includes(ct.id)?ct.color:"#555",padding:"6px 12px",borderRadius:"20px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",transition:"all .15s"}}>{ct.label}</button>)}</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444"}}>21 videos · {selTypes.length} format{selTypes.length!==1?"s":""} · {validTopics.length||1} topic{validTopics.length!==1?"s":""}</div>
+        </div>
+        {canLock&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>WEEK {selWeek} SUMMARY</div><div style={{fontSize:"13px",color:"#888",lineHeight:1.8}}><div>Niche: <strong style={{color:"#E8E8F0"}}>{niche}</strong></div>{validTopics.map((t,i)=><div key={i}>Topic {i+1}: <strong style={{color:"#E8E8F0"}}>{t}</strong> — {slotsPerTopic} videos</div>)}<div>Formats: <strong style={{color:"#E8E8F0"}}>{selTypes.join(", ")}</strong></div></div></div>}
+        <Btn onClick={lockWeek} disabled={!canLock}>Lock Week {selWeek} and Start</Btn>
+      </Card>}
     </div>
   );
 }
 
 // ── Content Engine ─────────────────────────────────────────────
 function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
-  const workable = weeks.filter(w => w.slots && w.slots.length > 0 && (w.status==="draft"||w.status==="live"));
-  const lastWorkable = workable[workable.length - 1];
-  const [activeId,     setActiveId]     = useState(lastWorkable ? lastWorkable.id : null);
-  const [generating,   setGenerating]   = useState(false);
-  const [genProgress,  setGenProgress]  = useState(0);
-  const [genTotal,     setGenTotal]     = useState(0);
-  const [expanded,     setExpanded]     = useState(null);
-  const [extractingId, setExtractingId] = useState(null);
-  const [footageId,    setFootageId]    = useState(null);
-  const [exported,     setExported]     = useState(false);
-  const [showImport,   setShowImport]   = useState(false);
-  const [manifest,     setManifest]     = useState("");
-  const [importErr,    setImportErr]    = useState("");
-  const [importOk,     setImportOk]     = useState(false);
-  const [batchingKW,   setBatchingKW]   = useState(false);
-  const [batchKWProgress, setBatchKWProgress] = useState(0);
-  const [batchingFoot, setBatchingFoot] = useState(false);
-  const [batchFootProgress, setBatchFootProgress] = useState(0);
+  const workable = weeks.filter(w=>w.slots&&w.slots.length>0&&(w.status==="draft"||w.status==="live"));
+  const lastW = workable[workable.length-1];
+  const [activeId,    setActiveId]    = useState(lastW?lastW.id:null);
+  const [generating,  setGenerating]  = useState(false);
+  const [genProgress, setGenProgress] = useState(0);
+  const [genTotal,    setGenTotal]    = useState(0);
+  const [genVideos,   setGenVideos]   = useState(false);
+  const [vidProgress, setVidProgress] = useState(0);
+  const [vidTotal,    setVidTotal]    = useState(0);
+  const [vidStatus,   setVidStatus]   = useState("");
+  const [uploading,   setUploading]   = useState(false);
+  const [uploadProg,  setUploadProg]  = useState(0);
+  const [expanded,    setExpanded]    = useState(null);
+  const [ytToken,     setYtToken]     = useState(null);
+  const [ytConnected, setYtConnected] = useState(false);
+  const [ytError,     setYtError]     = useState("");
 
-  const activeWeek = weeks.find(w => w.id === activeId) || workable[0];
+  const activeWeek = weeks.find(w=>w.id===activeId)||workable[0];
 
-  const updateSlot = (wid, sid, up) => {
-    setWeeks(prev => prev.map(w => w.id === wid ? {
-      ...w,
-      slots: w.slots.map(s => s.id === sid ? {...s, ...up} : s),
-    } : w));
+  const updateSlot=(wid,sid,up)=>setWeeks(prev=>prev.map(w=>w.id===wid?{...w,slots:w.slots.map(s=>s.id===sid?{...s,...up}:s)}:w));
+
+  // YouTube OAuth
+  const connectYouTube = () => {
+    const clientId = settings.youtubeClientId;
+    if (!clientId) { setYtError("Add your YouTube Web Client ID in Setup first"); return; }
+    setYtError("");
+    if (!window.google) { setYtError("Google Identity Services not loaded — check connection"); return; }
+    const tokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube",
+      callback: (resp) => {
+        if (resp.error) { setYtError("Auth failed: "+resp.error); return; }
+        setYtToken(resp.access_token);
+        setYtConnected(true);
+        setYtError("");
+      },
+    });
+    tokenClient.requestAccessToken();
   };
 
-  const generateAll = async () => {
-    if (!activeWeek || !activeWeek.slots) return;
-    const pending = activeWeek.slots.filter(s => s.status === "pending");
+  // Generate all scripts
+  const generateAll = async() => {
+    if (!activeWeek||!activeWeek.slots) return;
+    const pending = activeWeek.slots.filter(s=>s.status==="pending");
     if (!pending.length) return;
     setGenerating(true); setGenTotal(pending.length); setGenProgress(0);
-    for (let i = 0; i < pending.length; i += 3) {
-      const batch = pending.slice(i, i + 3);
+    for (let i=0; i<pending.length; i+=3) {
+      const batch = pending.slice(i,i+3);
       try {
-        // Pass full slot info so each script uses its assigned topic
-        const slotInfo = batch.map(s => ({topic: s.topic || activeWeek.topic || "trending topic", contentType: s.contentType}));
+        const slotInfo = batch.map(s=>({topic:s.topic||activeWeek.topic||"general",contentType:s.contentType}));
         const scripts = await genScripts(slotInfo, activeWeek.evolvedPrompt);
-        batch.forEach((slot, j) => {
-          if (scripts[j]) updateSlot(activeWeek.id, slot.id, {script:scripts[j], status:"script_ready"});
-        });
-      } catch(e) { console.error(e); }
-      setGenProgress(Math.min(i + 3, pending.length));
+        batch.forEach((slot,j)=>{ if(scripts[j]) updateSlot(activeWeek.id,slot.id,{script:scripts[j],status:"script_ready"}); });
+      } catch(e){ console.error(e); }
+      setGenProgress(Math.min(i+3,pending.length));
     }
     setGenerating(false);
   };
 
-  const doExtract = async (slot) => {
-    setExtractingId(slot.id);
-    try {
-      const k = await extractKW(slot.script.script);
-      updateSlot(activeWeek.id, slot.id, {keywords:k, status:"keywords_extracted"});
-    } catch {}
-    setExtractingId(null);
-  };
-
-  const doFootage = async (slot) => {
-    setFootageId(slot.id);
-    const clips = settings.pexelsKey
-      ? await pexelsSearch(slot.keywords[0], settings.pexelsKey)
-      : [{id:"mock", preview:null, url:"#", duration:10}];
-    updateSlot(activeWeek.id, slot.id, {footage:clips, status:"footage_found"});
-    setFootageId(null);
-  };
-
-  const batchExtract = async () => {
+  // Generate all videos in browser
+  const generateAllVideos = async() => {
     if (!activeWeek) return;
-    const ready = activeWeek.slots.filter(s => s.status === "script_ready");
-    setBatchingKW(true); setBatchKWProgress(0);
-    for (let i = 0; i < ready.length; i++) {
+    const scriptReady = activeWeek.slots.filter(s=>s.status==="script_ready"&&s.script);
+    if (!scriptReady.length) return;
+    setGenVideos(true); setVidTotal(scriptReady.length); setVidProgress(0); setVidStatus("");
+    for (let i=0; i<scriptReady.length; i++) {
+      const slot = scriptReady[i];
+      setVidStatus("Generating: "+slot.script.title);
+      try {
+        const blob = await generateVideoBlob(slot);
+        const url  = URL.createObjectURL(blob);
+        updateSlot(activeWeek.id, slot.id, {videoBlob:blob, videoUrl:url, status:"video_ready"});
+      } catch(e) {
+        console.error("Video gen failed for slot", slot.id, e);
+        updateSlot(activeWeek.id, slot.id, {status:"video_failed"});
+      }
+      setVidProgress(i+1);
+    }
+    setVidStatus("");
+    setGenVideos(false);
+  };
+
+  // Upload all to YouTube
+  const uploadAll = async() => {
+    if (!ytToken||!activeWeek) return;
+    const ready = activeWeek.slots.filter(s=>s.status==="video_ready"&&s.videoBlob&&s.scheduleStatus==="unscheduled");
+    if (!ready.length) return;
+    setUploading(true); setUploadProg(0);
+    for (let i=0; i<ready.length; i++) {
       const slot = ready[i];
       try {
-        const k = await extractKW(slot.script.script);
-        updateSlot(activeWeek.id, slot.id, {keywords:k, status:"keywords_extracted"});
-      } catch(e) { console.error(e); }
-      setBatchKWProgress(i + 1);
-    }
-    setBatchingKW(false);
-  };
-
-  const batchFootage = async () => {
-    if (!activeWeek) return;
-    const ready = activeWeek.slots.filter(s => s.status === "keywords_extracted");
-    setBatchingFoot(true); setBatchFootProgress(0);
-    for (let i = 0; i < ready.length; i++) {
-      const slot = ready[i];
-      if (slot.keywords && slot.keywords.length > 0) {
-        const clips = settings.pexelsKey
-          ? await pexelsSearch(slot.keywords[0], settings.pexelsKey)
-          : [{id:"mock", preview:null, url:"#", duration:10}];
-        updateSlot(activeWeek.id, slot.id, {footage:clips, status:"footage_found"});
+        const publishAt = buildPublishTime(DAYS[slot.day], TIMES[slot.time], 7);
+        const videoId   = await uploadToYouTube(slot.videoBlob, slot, ytToken, publishAt);
+        if (videoId) updateSlot(activeWeek.id, slot.id, {youtubeId:videoId, scheduleStatus:"youtube_done", status:"scheduled"});
+      } catch(e) {
+        console.error("Upload failed:", e);
+        if (e.message && e.message.includes("401")) { setYtConnected(false); setYtToken(null); setUploading(false); setYtError("Token expired — reconnect YouTube"); return; }
       }
-      setBatchFootProgress(i + 1);
+      setUploadProg(i+1);
     }
-    setBatchingFoot(false);
+    setUploading(false);
   };
 
-  const doExport = () => {
-    if (!activeWeek) return;
-    const jobs = activeWeek.slots.map(s => ({
-      jobId: s.id, weekId: activeWeek.id, niche: activeWeek.niche, topic: activeWeek.topic,
-      day: DAYS[s.day], time: TIMES[s.time], contentType: s.contentType,
-      voiceId: settings.voiceId, targetDuration: settings.targetDuration,
-      script: s.script ? s.script.script : "",
-      hook: s.script ? s.script.hook : "",
-      title: s.script ? s.script.title : "",
-      ytCaption: s.script ? s.script.ytCaption : "",
-      keywords: s.keywords,
-      footage: s.footage.map(c => ({id:c.id, url:c.url, duration:c.duration})),
-      instagramEnabled: settings.instagramEnabled || false,
-      bufferKey: settings.bufferKey || "",
-      bufferInstagramProfileId: settings.bufferInstagramProfileId || "",
-    }));
-    const blob = new Blob([JSON.stringify(jobs, null, 2)], {type:"application/json"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = "week" + activeWeek.id + "_jobs.json"; a.click();
-    URL.revokeObjectURL(url); setExported(true);
-  };
+  if (!workable.length) return (
+    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+      <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
+      <Card><SL>NO WEEKS LOCKED YET</SL><p style={{fontSize:"13px",color:"#555",lineHeight:1.75,marginBottom:"14px"}}>Go to <strong style={{color:"#ADFF2F"}}>Planner</strong> to lock a week first.</p><Btn small variant="green" onClick={()=>onNavigate("planner")}>Go to Planner</Btn></Card>
+    </div>
+  );
 
-  const doImport = () => {
-    setImportErr(""); setImportOk(false);
-    try {
-      const m = JSON.parse(manifest);
-      if (!Array.isArray(m)) throw new Error();
-      setWeeks(prev => prev.map(w => {
-        if (w.id !== activeWeek.id) return w;
-        return {...w, slots: w.slots.map(s => {
-          const e = m.find(x => x.jobId === s.id);
-          return e ? {...s, youtubeId:e.youtubeId||s.youtubeId, scheduleStatus:e.scheduleStatus||s.scheduleStatus, igScheduled:e.igScheduled||s.igScheduled} : s;
-        })};
-      }));
-      setImportOk(true); setShowImport(false); setManifest("");
-    } catch { setImportErr("Invalid JSON — paste the manifest.json from the pipeline"); }
-  };
+  const slots       = activeWeek?activeWeek.slots:[];
+  const pendingCt   = slots.filter(s=>s.status==="pending").length;
+  const scriptCt    = slots.filter(s=>s.status==="script_ready"&&s.script).length;
+  const videoCt     = slots.filter(s=>s.status==="video_ready"||s.status==="scheduled").length;
+  const scheduledCt = slots.filter(s=>s.scheduleStatus==="youtube_done").length;
+  const uploadReady = slots.filter(s=>s.status==="video_ready"&&s.scheduleStatus==="unscheduled").length;
 
-  if (!workable.length) {
-    return (
-      <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-        <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
-        <Card>
-          <SL>NO WEEKS LOCKED YET</SL>
-          <p style={{fontSize:"13px",color:"#555",lineHeight:1.75,marginBottom:"14px"}}>
-            Go to <strong style={{color:"#ADFF2F"}}>Planner</strong>, enter a niche, pick a topic, and lock a week first.
-          </p>
-          <Btn small variant="green" onClick={() => onNavigate("planner")}>Go to Planner</Btn>
-        </Card>
-      </div>
-    );
-  }
-
-  const slots       = activeWeek ? activeWeek.slots : [];
-  const pendingCt   = slots.filter(s => s.status === "pending").length;
-  const readyCt     = slots.filter(s => s.status !== "pending").length;
-  const footageCt   = slots.filter(s => s.status === "footage_found").length;
-  const scheduledCt = slots.filter(s => s.scheduleStatus === "youtube_done").length;
-  const pendingSch  = 21 - scheduledCt;
-  const SC  = {pending:"#2a2a3a", script_ready:"#FF6B35", keywords_extracted:"#00CFFF", footage_found:"#B06EF3"};
-  const SLM = {pending:"PENDING", script_ready:"SCRIPT",  keywords_extracted:"KW",      footage_found:"FOOTAGE"};
+  const SC  = {pending:"#2a2a3a",script_ready:"#FF6B35",video_ready:"#B06EF3",video_failed:"#FF2D6B",scheduled:"#ADFF2F"};
+  const SLM = {pending:"PENDING",script_ready:"SCRIPT ✓",video_ready:"VIDEO ✓",video_failed:"FAILED",scheduled:"ON YT ✓"};
 
   return (
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"10px"}}>
-        <div>
-          <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
-          <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>Generate · Assemble · Schedule to YouTube</p>
-        </div>
-        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+        <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2><p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>Scripts → Videos → YouTube — all in browser</p></div>
+      </div>
+
+      {workable.length>1&&<div style={{display:"flex",gap:"4px",background:"#111118",border:"1px solid #1A1A2A",padding:"4px",borderRadius:"10px",alignSelf:"flex-start"}}>{workable.map(w=><button key={w.id} onClick={()=>{setActiveId(w.id);setExpanded(null);}} style={{background:activeId===w.id?"#ADFF2F":"transparent",color:activeId===w.id?"#08080E":"#555",border:"none",padding:"6px 12px",borderRadius:"7px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>Week {w.id}</button>)}</div>}
+
+      {activeWeek&&<div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"10px 14px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}><Tag color="#FF6B35">Week {activeWeek.id}</Tag><Tag color="#B06EF3">{activeWeek.niche}</Tag>{(activeWeek.topics||[]).map((t,i)=><Tag key={i} color="#555">T{i+1}: {t.slice(0,22)}</Tag>)}</div>}
+
+      {/* Stats */}
+      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+        <StatBox label="Scripts" value={scriptCt+"/21"} sub="written" accent="#FF6B35"/>
+        <StatBox label="Videos"  value={videoCt+"/21"} sub="generated" accent="#B06EF3"/>
+        <StatBox label="On YouTube" value={scheduledCt+"/21"} sub="scheduled" accent="#ADFF2F"/>
+        <StatBox label="Pending" value={pendingCt} sub="scripts" accent={pendingCt>0?"#555":"#ADFF2F"}/>
+      </div>
+
+      {/* Step 1 — Scripts */}
+      <Card accent={scriptCt===21?"#ADFF2F22":"#1E1E2E"}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+          <div><SL color={scriptCt===21?"#ADFF2F":"#555"}>STEP 1 — GENERATE SCRIPTS</SL></div>
           {generating
-            ? <div style={{display:"flex",alignItems:"center",gap:"8px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"9px 14px"}}><Spinner/><span style={{fontFamily:"Space Mono",fontSize:"12px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
-            : <Btn onClick={generateAll} disabled={!pendingCt}>{pendingCt ? "Generate "+pendingCt+" Scripts" : "All Scripts Done"}</Btn>
+            ? <div style={{display:"flex",alignItems:"center",gap:"8px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"8px 12px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
+            : <Btn small onClick={generateAll} disabled={!pendingCt}>{pendingCt?"Generate "+pendingCt+" Scripts":"All Scripts Done ✓"}</Btn>
           }
-          {readyCt > 0 && !generating && (
-            <Btn variant="ghost" small onClick={batchExtract} disabled={batchingKW}>
-              {batchingKW ? <><Spinner size={12}/>{batchKWProgress}/{readyCt}</> : "Extract All Keywords"}
-            </Btn>
-          )}
-          {slots.filter(s=>s.status==="keywords_extracted").length > 0 && !batchingKW && (
-            <Btn variant="ghost" small onClick={batchFootage} disabled={batchingFoot}>
-              {batchingFoot ? <><Spinner size={12}/>{batchFootProgress}/{slots.filter(s=>s.status==="keywords_extracted").length}</> : "Find All Footage"}
-            </Btn>
-          )}
-          {footageCt > 0 && <Btn variant="green" small onClick={doExport}>{exported ? "✓ Exported" : "↓ Export Jobs"}</Btn>}
         </div>
-      </div>
+        {scriptCt>0&&<div style={{background:"#1A1A2A",borderRadius:"4px",height:"4px"}}><div style={{width:(scriptCt/21*100)+"%",height:"100%",background:"#FF6B35",borderRadius:"4px",transition:"width .5s"}}/></div>}
+      </Card>
 
-      {workable.length > 1 && (
-        <div style={{display:"flex",gap:"4px",background:"#111118",border:"1px solid #1A1A2A",padding:"4px",borderRadius:"10px",alignSelf:"flex-start"}}>
-          {workable.map(w => (
-            <button key={w.id} onClick={() => { setActiveId(w.id); setExpanded(null); setExported(false); setImportOk(false); }}
-              style={{background:activeId===w.id?"#ADFF2F":"transparent",color:activeId===w.id?"#08080E":"#555",border:"none",padding:"6px 12px",borderRadius:"7px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>
-              Week {w.id}
-            </button>
-          ))}
+      {/* Step 2 — Generate Videos */}
+      <Card accent={videoCt===21?"#B06EF344":"#1E1E2E"}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:genVideos?"10px":"0"}}>
+          <div><SL color={videoCt===21?"#B06EF3":"#555"}>STEP 2 — GENERATE VIDEOS IN BROWSER</SL><p style={{fontSize:"12px",color:"#555",marginTop:"-6px",marginBottom:"8px"}}>Canvas animation · word-by-word text · no external tools</p></div>
+          {genVideos
+            ? <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}><div style={{display:"flex",alignItems:"center",gap:"8px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"8px 12px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#B06EF3"}}>{vidProgress}/{vidTotal}</span></div>{vidStatus&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#555",maxWidth:"140px",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{vidStatus}</div>}</div>
+            : <Btn small variant="ghost" onClick={generateAllVideos} disabled={!scriptCt||!!genVideos}>{videoCt===21?"All Videos Done ✓":scriptCt>0?"Generate "+scriptCt+" Videos":"Generate Scripts First"}</Btn>
+          }
         </div>
-      )}
+        {videoCt>0&&<div style={{background:"#1A1A2A",borderRadius:"4px",height:"4px"}}><div style={{width:(videoCt/21*100)+"%",height:"100%",background:"#B06EF3",borderRadius:"4px",transition:"width .5s"}}/></div>}
+        {!window.MediaRecorder&&<div style={{marginTop:"10px",fontSize:"12px",color:"#FF2D6B",fontFamily:"Space Mono"}}>⚠ Use Chrome browser — MediaRecorder required for video generation</div>}
+      </Card>
 
-      {activeWeek && (
-        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"10px 14px"}}>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",marginBottom: activeWeek.topics&&activeWeek.topics.length>1?"8px":"0"}}>
-            <Tag color="#FF6B35">Week {activeWeek.id}</Tag>
-            <Tag color="#B06EF3">{activeWeek.niche}</Tag>
-            <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555"}}>
-              {activeWeek.topics ? activeWeek.topics.length+" topics" : "1 topic"} · 21 videos
-            </span>
-          </div>
-          {activeWeek.topics && activeWeek.topics.length > 1 && (
-            <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-              {activeWeek.topics.map((t,i) => (
-                <div key={i} style={{background:"#111",border:"1px solid #2a2a3a",borderRadius:"6px",padding:"4px 10px",fontSize:"11px",color:"#888"}}>
-                  <span style={{color:"#ADFF2F",fontFamily:"Space Mono",fontSize:"9px"}}>T{i+1} </span>{t.slice(0,30)}{t.length>30?"...":""}
-                </div>
-              ))}
+      {/* Step 3 — Upload to YouTube */}
+      <Card accent={scheduledCt===21?"#ADFF2F44":"#1E1E2E"}>
+        <SL color={scheduledCt===21?"#ADFF2F":"#555"}>STEP 3 — UPLOAD TO YOUTUBE</SL>
+        {!ytConnected
+          ? <div>
+              <p style={{fontSize:"13px",color:"#888",marginBottom:"12px",lineHeight:1.7}}>Connect your YouTube account to upload all videos with one tap. Videos upload as private and publish automatically at your scheduled times.</p>
+              {ytError&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px",fontFamily:"Space Mono"}}>{ytError}</div>}
+              <Btn onClick={connectYouTube} disabled={!settings.youtubeClientId}>
+                {settings.youtubeClientId?"Connect YouTube Account":"Add YouTube Client ID in Setup first"}
+              </Btn>
             </div>
-          )}
-        </div>
-      )}
-
-      <div style={{background:"#070712",border:"1px solid #ADFF2F22",borderRadius:"12px",padding:"18px"}}>
-        <SL color="#ADFF2F">SCHEDULING — YOUTUBE</SL>
-        <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"16px"}}>
-          <StatBox label="Scripts"   value={readyCt+"/21"}   sub="generated"  accent="#FF6B35"/>
-          <StatBox label="Footage"   value={footageCt+"/21"} sub="matched"    accent="#B06EF3"/>
-          <StatBox label="Scheduled" value={scheduledCt+"/21"} sub="on YouTube" accent="#ADFF2F"/>
-          <StatBox label="Pending"   value={pendingSch} sub="to upload" accent={pendingSch>0?"#FF2D6B":"#ADFF2F"}/>
-        </div>
-        <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center",marginBottom:"12px"}}>
-          <Btn variant={pendingSch>0?"primary":"ghost"} disabled={!exported} onClick={() => setShowImport(true)}>
-            {scheduledCt===0 ? "Schedule All" : pendingSch>0 ? "Schedule Pending ("+pendingSch+")" : "All Scheduled"}
-          </Btn>
-          {importOk && <Tag color="#ADFF2F">Synced</Tag>}
-        </div>
-        {exported && scheduledCt === 0 && (
-          <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"8px",padding:"12px 14px"}}>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"6px"}}>RUN PIPELINE</div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",lineHeight:1.9}}>
-              <div>Windows: <span style={{color:"#00CFFF"}}>python video_pipeline.py --jobs week{activeWeek ? activeWeek.id : ""}_jobs.json --upload</span></div>
-              <div>Android: Google Colab — upload file — run — download manifest.json</div>
+          : <div>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}>
+                <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
+                <span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>YouTube Connected</span>
+                <Btn small variant="ghost" onClick={()=>{setYtConnected(false);setYtToken(null);}}>Disconnect</Btn>
+              </div>
+              {uploading
+                ? <div style={{display:"flex",alignItems:"center",gap:"10px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px"}}><Spinner/><span style={{fontFamily:"Space Mono",fontSize:"12px",color:"#ADFF2F"}}>Uploading {uploadProg}/{uploadReady}...</span></div>
+                : <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+                    {uploadReady>0&&<Btn onClick={uploadAll}>{scheduledCt===0?"Upload All "+uploadReady+" Videos →":"Upload Remaining ("+uploadReady+")"}</Btn>}
+                    {scheduledCt===21&&<div style={{display:"flex",alignItems:"center",gap:"8px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F"}}/>  <span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>All 21 videos scheduled on YouTube ✓</span></div>}
+                    {uploadReady===0&&scheduledCt<21&&videoCt<21&&<p style={{fontFamily:"Space Mono",fontSize:"11px",color:"#444"}}>Generate videos in Step 2 first</p>}
+                  </div>
+              }
             </div>
-          </div>
-        )}
-        {!exported && <p style={{fontFamily:"Space Mono",fontSize:"10px",color:"#444"}}>Generate scripts and match footage first, then export.</p>}
-        {showImport && (
-          <div style={{marginTop:"12px",background:"#0A0A12",border:"1px solid #ADFF2F33",borderRadius:"10px",padding:"14px"}}>
-            <SL color="#ADFF2F">PASTE manifest.json FROM PIPELINE</SL>
-            <textarea value={manifest} onChange={e => setManifest(e.target.value)} rows={4}
-              placeholder='[{"jobId":"abc","scheduleStatus":"youtube_done","youtubeId":"xxxxx"},...]'
-              style={{width:"100%",background:"#111",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px",color:"#E8E8F0",fontSize:"12px",fontFamily:"Space Mono",lineHeight:1.6}}/>
-            {importErr && <div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"6px"}}>{importErr}</div>}
-            <div style={{display:"flex",gap:"8px",marginTop:"10px"}}>
-              <Btn small onClick={doImport}>Import and Sync</Btn>
-              <Btn small variant="ghost" onClick={() => { setShowImport(false); setManifest(""); setImportErr(""); }}>Cancel</Btn>
-            </div>
-          </div>
-        )}
-      </div>
+        }
+      </Card>
 
-      {readyCt > 0 && (
-        <div style={{background:"#1A1A2A",borderRadius:"4px",height:"4px"}}>
-          <div style={{width:((readyCt/21)*100)+"%",height:"100%",background:"#ADFF2F",borderRadius:"4px",transition:"width .5s"}}/>
-        </div>
-      )}
-
-      {DAYS.map((day, dayIdx) => {
-        const daySlots = slots.filter(s => s.day === dayIdx);
-        const dayReady = daySlots.filter(s => s.status !== "pending").length;
-        const daySched = daySlots.filter(s => s.scheduleStatus === "youtube_done").length;
+      {/* Slots list */}
+      {DAYS.map((day,dayIdx)=>{
+        const daySlots=slots.filter(s=>s.day===dayIdx);
+        const dayReady=daySlots.filter(s=>s.status!=="pending").length;
+        const daySched=daySlots.filter(s=>s.scheduleStatus==="youtube_done").length;
         return (
           <div key={day}>
             <SL>{day.toUpperCase()} — {dayReady}/3 scripts · {daySched}/3 on YouTube</SL>
             <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
-              {daySlots.map(slot => {
-                const ct = CTYPES.find(t => t.id === slot.contentType);
+              {daySlots.map(slot=>{
+                const ct=CTYPES.find(t=>t.id===slot.contentType);
                 return (
                   <div key={slot.id} style={{background:"#0A0A12",border:"1px solid "+(expanded===slot.id?"#ADFF2F33":"#1A1A2A"),borderRadius:"10px",overflow:"hidden"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",cursor:"pointer"}} onClick={() => setExpanded(expanded===slot.id ? null : slot.id)}>
+                    <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",cursor:"pointer"}} onClick={()=>setExpanded(expanded===slot.id?null:slot.id)}>
                       <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",width:"50px",flexShrink:0}}>{TIMES[slot.time]}</div>
                       <div style={{width:6,height:6,borderRadius:"50%",background:SC[slot.status]||"#2a2a3a",flexShrink:0}}/>
                       <div style={{flex:1,fontSize:"13px",fontWeight:slot.script?600:400,color:slot.script?"#E8E8F0":"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {slot.script ? slot.script.title : (slot.topic ? slot.topic.slice(0,30)+"..." : "Waiting...")}
+                        {slot.script?slot.script.title:(slot.topic||"Waiting...")}
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
-                        {slot.scheduleStatus==="youtube_done" && <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F"}}>YT</span>}
-                        {ct && <span style={{fontSize:"11px",color:ct.color,fontWeight:700}}>{ct.label}</span>}
-                        <span style={{fontFamily:"Space Mono",fontSize:"9px",color:SC[slot.status]||"#333"}}>{SLM[slot.status]}</span>
+                        {slot.scheduleStatus==="youtube_done"&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F"}}>YT✓</span>}
+                        {ct&&<span style={{fontSize:"11px",color:ct.color,fontWeight:700}}>{ct.label}</span>}
+                        <span style={{fontFamily:"Space Mono",fontSize:"9px",color:SC[slot.status]||"#333"}}>{SLM[slot.status]||slot.status}</span>
                       </div>
                     </div>
-                    {expanded === slot.id && slot.script && (
+                    {expanded===slot.id&&slot.script&&(
                       <div style={{padding:"0 12px 12px",borderTop:"1px solid #1A1A2A"}}>
                         <div style={{background:"#0d0d12",borderRadius:"8px",padding:"12px",margin:"10px 0"}}>
                           <div style={{fontSize:"10px",color:"#555",fontWeight:700,marginBottom:"4px"}}>HOOK</div>
@@ -894,43 +700,12 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
                           <div style={{fontSize:"10px",color:"#555",fontWeight:700,marginBottom:"4px"}}>SCRIPT</div>
                           <div style={{fontSize:"13px",color:"#CCC",lineHeight:1.7}}>{slot.script.script}</div>
                         </div>
-                        {slot.keywords && slot.keywords.length > 0 && (
-                          <div style={{marginBottom:"10px"}}>
-                            <div style={{fontSize:"10px",color:"#555",fontWeight:700,marginBottom:"6px"}}>KEYWORDS</div>
-                            <div style={{display:"flex",flexWrap:"wrap",gap:"5px"}}>
-                              {slot.keywords.map((k,i) => <Tag key={i} color="#B06EF3">{k}</Tag>)}
-                            </div>
+                        {slot.youtubeId&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"6px",padding:"7px 10px",fontSize:"11px",fontFamily:"Space Mono",color:"#ADFF2F",marginBottom:"8px"}}>youtube.com/watch?v={slot.youtubeId}</div>}
+                        {slot.videoUrl&&!slot.youtubeId&&(
+                          <div style={{marginTop:"8px",display:"flex",gap:"8px"}}>
+                            <a href={slot.videoUrl} download={"video_"+slot.id+".webm"} style={{background:"#111118",border:"1px solid #1E1E2E",color:"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:"4px"}}>↓ Download</a>
                           </div>
                         )}
-                        {slot.footage && slot.footage.length > 0 && (
-                          <div style={{marginBottom:"10px"}}>
-                            <div style={{fontSize:"10px",color:"#555",fontWeight:700,marginBottom:"6px"}}>CLIPS</div>
-                            <div style={{display:"flex",gap:"5px"}}>
-                              {slot.footage.slice(0,4).map((c,i) => (
-                                <div key={i} style={{width:60,height:42,background:"#1a1a2a",borderRadius:"4px",overflow:"hidden",border:"1px solid #2a2a3a"}}>
-                                  {c.preview ? <img src={c.preview} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/> : <div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"#444",fontSize:"9px"}}>clip</div>}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                        {slot.youtubeId && (
-                          <div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"6px",padding:"7px 10px",fontSize:"11px",fontFamily:"Space Mono",color:"#ADFF2F",marginBottom:"8px"}}>
-                            youtube.com/watch?v={slot.youtubeId}
-                          </div>
-                        )}
-                        <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-                          {slot.status==="script_ready" && (
-                            <Btn small onClick={() => doExtract(slot)} disabled={extractingId===slot.id}>
-                              {extractingId===slot.id ? <><Spinner size={12}/>Extracting...</> : "Extract Keywords"}
-                            </Btn>
-                          )}
-                          {slot.status==="keywords_extracted" && (
-                            <Btn small onClick={() => doFootage(slot)} disabled={footageId===slot.id}>
-                              {footageId===slot.id ? <><Spinner size={12}/>Searching...</> : "Find Footage"}
-                            </Btn>
-                          )}
-                        </div>
                       </div>
                     )}
                   </div>
@@ -946,330 +721,159 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
 
 // ── Analytics Brain ────────────────────────────────────────────
 function AnalyticsBrain({weeks, setWeeks, lastInsight, setLastInsight}) {
-  const [rawData, setRawData] = useState(JSON.stringify(MOCK_ANALYTICS, null, 2));
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
-  const liveWeek = weeks.find(w => w.status === "live");
-
-  const run = async () => {
-    setLoading(true); setError("");
-    try {
-      const p = JSON.parse(rawData);
-      const r = await weeklyInsight(p, liveWeek ? liveWeek.niche : "General", liveWeek ? liveWeek.evolvedPrompt : "");
-      setLastInsight(r);
-      if (r.evolvedPrompt && liveWeek)
-        setWeeks(prev => prev.map(w => w.id===liveWeek.id ? {...w, evolvedPrompt:r.evolvedPrompt} : w));
-    } catch { setError("Paste valid JSON analytics data."); }
-    setLoading(false);
-  };
-
+  const [rawData,setRawData]=useState(JSON.stringify(MOCK_ANALYTICS,null,2));
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const liveWeek=weeks.find(w=>w.status==="live");
+  const run=async()=>{setLoading(true);setError("");try{const p=JSON.parse(rawData);const r=await weeklyInsight(p,liveWeek?liveWeek.niche:"General",liveWeek?liveWeek.evolvedPrompt:"");setLastInsight(r);if(r.evolvedPrompt&&liveWeek)setWeeks(prev=>prev.map(w=>w.id===liveWeek.id?{...w,evolvedPrompt:r.evolvedPrompt}:w));}catch{setError("Paste valid JSON analytics data.");}setLoading(false);};
   return (
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div>
-        <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Analytics Brain</h2>
-        <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>Paste YouTube data → Claude analyses → Engine evolves</p>
-      </div>
-
-      {lastInsight && (
-        <div style={{background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"10px",padding:"12px 14px"}}>
-          <SL color="#ADFF2F">RECOMMENDATIONS SAVED — LIVE IN PLANNER</SL>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            {lastInsight.nextNiches && lastInsight.nextNiches.map((n,i) => <Tag key={i} color={i===0?"#FF6B35":"#555"}>{i===0?"★ ":""}{n}</Tag>)}
-          </div>
-        </div>
-      )}
-
+      <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Analytics Brain</h2><p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>Paste YouTube data → Claude analyses → Engine evolves</p></div>
+      {lastInsight&&<div style={{background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"10px",padding:"12px 14px"}}><SL color="#ADFF2F">RECOMMENDATIONS SAVED — IN PLANNER</SL><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{lastInsight.nextNiches&&lastInsight.nextNiches.map((n,i)=><Tag key={i} color={i===0?"#FF6B35":"#555"}>{i===0?"★ ":""}{n}</Tag>)}</div></div>}
       <Card>
         <SL>PASTE YOUTUBE ANALYTICS JSON (sample pre-loaded)</SL>
-        <textarea value={rawData} onChange={e => setRawData(e.target.value)} rows={9}
-          style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"11px",fontFamily:"Space Mono",lineHeight:1.6}}/>
-        {error && <div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"6px"}}>{error}</div>}
-        <div style={{marginTop:"12px"}}>
-          <Btn onClick={run} disabled={loading}>{loading ? <><Spinner/>Analysing...</> : "Run Weekly Analysis"}</Btn>
-        </div>
+        <textarea value={rawData} onChange={e=>setRawData(e.target.value)} rows={9} style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"11px",fontFamily:"Space Mono",lineHeight:1.6}}/>
+        {error&&<div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"6px"}}>{error}</div>}
+        <div style={{marginTop:"12px"}}><Btn onClick={run} disabled={loading}>{loading?<><Spinner/>Analysing...</>:"Run Weekly Analysis"}</Btn></div>
       </Card>
-
-      {lastInsight && (
-        <>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            <StatBox label="Top Format" value={lastInsight.topFormat||"—"} sub="this week" accent="#FF6B35"/>
-            <StatBox label="CTR"        value={MOCK_ANALYTICS.ctr+"%"}     sub="avg"       accent="#00CFFF"/>
-            <StatBox label="Duration"   value={MOCK_ANALYTICS.duration+"%"} sub="avg"      accent="#B06EF3"/>
-            <StatBox label="New Subs"   value={"+"+MOCK_ANALYTICS.newSubs}  sub="this week" accent="#ADFF2F"/>
-          </div>
-          <div style={{background:"#070712",border:"1px solid #00CFFF22",borderRadius:"12px",padding:"18px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}>
-              <div style={{width:26,height:26,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",color:"#00CFFF",fontSize:"12px"}}>◈</div>
-              <SL color="#00CFFF">CLAUDE INTELLIGENCE DEBRIEF</SL>
-            </div>
-            <p style={{fontSize:"13px",color:"#BBB",lineHeight:1.75,marginBottom:"12px"}}>{lastInsight.summary}</p>
-            <div style={{background:"#0A0A18",borderRadius:"8px",padding:"10px 12px",borderLeft:"3px solid #00CFFF44"}}>
-              <div style={{fontSize:"10px",color:"#00CFFF55",fontWeight:700,marginBottom:"4px"}}>RECOMMENDATION</div>
-              <p style={{fontSize:"13px",color:"#CCC",lineHeight:1.6}}>{lastInsight.recommendation}</p>
-            </div>
-          </div>
-          {lastInsight.adjustments && lastInsight.adjustments.length > 0 && (
-            <Card>
-              <SL>ENGINE AUTO-ADJUSTMENTS</SL>
-              {lastInsight.adjustments.map((a,i) => (
-                <div key={i} style={{display:"flex",gap:"10px",marginBottom:"9px"}}>
-                  <div style={{color:"#ADFF2F",flexShrink:0}}>→</div>
-                  <div style={{fontSize:"13px",color:"#CCC"}}>{a}</div>
-                </div>
-              ))}
-            </Card>
-          )}
-          {lastInsight.evolvedPrompt && (
-            <div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"12px",padding:"16px"}}>
-              <SL color="#ADFF2F">EVOLVED SCRIPT PROMPT — SAVED</SL>
-              <p style={{fontSize:"11px",color:"#888",lineHeight:1.75,fontFamily:"Space Mono"}}>{lastInsight.evolvedPrompt}</p>
-            </div>
-          )}
-        </>
-      )}
+      {lastInsight&&<>
+        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+          <StatBox label="Top Format" value={lastInsight.topFormat||"—"} sub="this week" accent="#FF6B35"/>
+          <StatBox label="CTR" value={MOCK_ANALYTICS.ctr+"%"} sub="avg" accent="#00CFFF"/>
+          <StatBox label="Duration" value={MOCK_ANALYTICS.duration+"%"} sub="avg" accent="#B06EF3"/>
+          <StatBox label="New Subs" value={"+"+MOCK_ANALYTICS.newSubs} sub="this week" accent="#ADFF2F"/>
+        </div>
+        <div style={{background:"#070712",border:"1px solid #00CFFF22",borderRadius:"12px",padding:"18px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}><div style={{width:26,height:26,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",color:"#00CFFF",fontSize:"12px"}}>◈</div><SL color="#00CFFF">CLAUDE INTELLIGENCE DEBRIEF</SL></div>
+          <p style={{fontSize:"13px",color:"#BBB",lineHeight:1.75,marginBottom:"12px"}}>{lastInsight.summary}</p>
+          <div style={{background:"#0A0A18",borderRadius:"8px",padding:"10px 12px",borderLeft:"3px solid #00CFFF44"}}><div style={{fontSize:"10px",color:"#00CFFF55",fontWeight:700,marginBottom:"4px"}}>RECOMMENDATION</div><p style={{fontSize:"13px",color:"#CCC",lineHeight:1.6}}>{lastInsight.recommendation}</p></div>
+        </div>
+        {lastInsight.adjustments&&lastInsight.adjustments.length>0&&<Card><SL>AUTO-ADJUSTMENTS</SL>{lastInsight.adjustments.map((a,i)=><div key={i} style={{display:"flex",gap:"10px",marginBottom:"9px"}}><div style={{color:"#ADFF2F",flexShrink:0}}>→</div><div style={{fontSize:"13px",color:"#CCC"}}>{a}</div></div>)}</Card>}
+        {lastInsight.evolvedPrompt&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"12px",padding:"16px"}}><SL color="#ADFF2F">EVOLVED SCRIPT PROMPT — SAVED</SL><p style={{fontSize:"11px",color:"#888",lineHeight:1.75,fontFamily:"Space Mono"}}>{lastInsight.evolvedPrompt}</p></div>}
+      </>}
     </div>
   );
 }
 
 // ── Setup ──────────────────────────────────────────────────────
 function Setup({settings, setSettings, onReset, syncStatus}) {
-  const [local, setLocal] = useState({...settings});
-  const [flash, setFlash] = useState(false);
-
-  const set = (k, v) => {
-    const updated = {...local, [k]: v};
-    setLocal(updated);
-    setSettings(updated);
-    setFlash(true);
-    setTimeout(() => setFlash(false), 1500);
-  };
-
-  const VOICES = [
-    "en-US-ChristopherNeural","en-US-AriaNeural","en-US-GuyNeural",
-    "en-GB-RyanNeural","en-GB-SoniaNeural","en-AU-WilliamNeural","en-IN-NeerjaNeural",
-  ];
-
+  const [local,setLocal]=useState({...settings});
+  const [flash,setFlash]=useState(false);
+  const set=(k,v)=>{const u={...local,[k]:v};setLocal(u);setSettings(u);setFlash(true);setTimeout(()=>setFlash(false),1500);};
+  const VOICES=["en-US-ChristopherNeural","en-US-AriaNeural","en-US-GuyNeural","en-GB-RyanNeural","en-GB-SoniaNeural","en-AU-WilliamNeural","en-IN-NeerjaNeural"];
   return (
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
-        <div>
-          <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Setup</h2>
-          <p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>All fields save automatically as you type</p>
-        </div>
-        {flash && <span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
+        <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Setup</h2><p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>All fields save automatically</p></div>
+        {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
       </div>
 
-      {/* YouTube */}
+      {/* YouTube Setup */}
       <Card>
-        <SL>YOUTUBE — PHASE 1</SL>
-        {[
-          {key:"pexelsKey",        label:"Pexels API Key",    type:"password", hint:"Free at pexels.com/api"},
-          {key:"youtubeChannelId", label:"YouTube Channel ID", type:"text",    hint:"YouTube Studio → Settings → Channel → Advanced"},
-        ].map(f => (
-          <div key={f.key} style={{marginBottom:"12px"}}>
-            <div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div>
-            <input type={f.type} value={local[f.key]} onChange={e => set(f.key, e.target.value)} placeholder={f.hint}
-              style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/>
+        <SL>YOUTUBE</SL>
+        <div style={{background:"#0A0A12",border:"1px solid #1a2a1a",borderRadius:"10px",padding:"14px",marginBottom:"14px"}}>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO GET YOUR WEB CLIENT ID</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",lineHeight:1.9}}>
+            <div>1. console.cloud.google.com → your project</div>
+            <div>2. APIs &amp; Services → YouTube Data API v3 → Enable</div>
+            <div>3. Credentials → Create → OAuth 2.0 → <strong style={{color:"#ADFF2F"}}>Web Application</strong></div>
+            <div>4. Authorized JS origins: add <span style={{color:"#00CFFF"}}>https://randoomscroll.vercel.app</span></div>
+            <div>5. Copy Client ID → paste below</div>
           </div>
-        ))}
-        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"8px",padding:"9px 12px"}}>
-          <div style={{fontSize:"10px",color:"#444",fontFamily:"Space Mono"}}>ANTHROPIC API — connected via Claude.ai. No key needed here.</div>
         </div>
+        {[{key:"youtubeClientId",label:"YouTube Web Client ID",type:"text",hint:"xxxxxxxxxxxx.apps.googleusercontent.com"},{key:"youtubeChannelId",label:"YouTube Channel ID",type:"text",hint:"YouTube Studio → Settings → Channel → Advanced"}].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/></div>)}
+        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"8px",padding:"9px 12px"}}><div style={{fontSize:"10px",color:"#444",fontFamily:"Space Mono"}}>ANTHROPIC API — connected via /api/claude proxy. No key needed here.</div></div>
       </Card>
 
       {/* Supabase */}
       <div style={{border:"1px solid #1a2a1a",borderRadius:"14px",padding:"18px",background:"#060E06"}}>
         <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-          <span style={{fontSize:"16px"}}>☁️</span>
-          <span style={{fontWeight:800,fontSize:"15px"}}>Supabase Sync</span>
+          <span>☁️</span><span style={{fontWeight:800,fontSize:"15px"}}>Supabase Sync</span>
           <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F",background:"#0D1A0D",border:"1px solid #ADFF2F33",padding:"2px 7px",borderRadius:"10px"}}>CROSS-DEVICE</span>
-          {syncStatus && <span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":"#FF6B35"}}>{syncStatus.toUpperCase()}</span>}
+          {syncStatus&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":"#FF6B35"}}>{syncStatus.toUpperCase()}</span>}
         </div>
-        <p style={{fontSize:"12px",color:"#555",lineHeight:1.7,marginBottom:"14px"}}>Enter once per device. Everything syncs automatically. On a new device, enter these 3 fields and all your data loads instantly.</p>
-        {[
-          {key:"supabaseUrl",  label:"Supabase Project URL",  type:"text",     hint:"https://xxxxxxxxxxxx.supabase.co"},
-          {key:"supabaseKey",  label:"Supabase Anon Key",     type:"password", hint:"Supabase → Settings → API → anon public"},
-          {key:"channelKey",   label:"Channel Key",           type:"text",     hint:"Your chosen password e.g. rand00mscroll-2025"},
-        ].map(f => (
-          <div key={f.key} style={{marginBottom:"12px"}}>
-            <div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div>
-            <input type={f.type} value={local[f.key]||""} onChange={e => set(f.key, e.target.value)} placeholder={f.hint}
-              style={{width:"100%",background:"#0A0A12",border:"1px solid #1a2a1a",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/>
-          </div>
-        ))}
-        <div style={{background:"#0A0A12",border:"1px solid #1a2a1a",borderRadius:"8px",padding:"10px 12px"}}>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"6px"}}>ONE-TIME SQL SETUP IN SUPABASE</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",lineHeight:2}}>
-            <div>create table r00m_data (channel_key text primary key, weeks jsonb, insight jsonb, settings jsonb, updated_at timestamptz default now());</div>
-            <div>alter table r00m_data enable row level security;</div>
-            <div>create policy "open" on r00m_data for all using (true) with check (true);</div>
-          </div>
-        </div>
+        <p style={{fontSize:"12px",color:"#555",lineHeight:1.7,marginBottom:"14px"}}>Enter once per device. Everything syncs automatically. New device: enter these 3 fields and all data loads instantly.</p>
+        {[{key:"supabaseUrl",label:"Supabase Project URL",type:"text",hint:"https://xxxxxxxxxxxx.supabase.co"},{key:"supabaseKey",label:"Supabase Anon Key",type:"password",hint:"Supabase → Settings → API → anon public"},{key:"channelKey",label:"Channel Key",type:"text",hint:"Your password e.g. rand00mscroll-2025"}].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"#0A0A12",border:"1px solid #1a2a1a",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/></div>)}
+        <div style={{background:"#0A0A12",border:"1px solid #1a2a1a",borderRadius:"8px",padding:"10px 12px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"6px"}}>ONE-TIME SQL IN SUPABASE</div><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",lineHeight:2}}><div>create table r00m_data (channel_key text primary key, weeks jsonb, insight jsonb, settings jsonb, updated_at timestamptz default now());</div><div>alter table r00m_data enable row level security;</div><div>create policy "open" on r00m_data for all using (true) with check (true);</div></div></div>
       </div>
 
-      {/* Posting preferences */}
+      {/* Posting prefs */}
       <Card>
         <SL>POSTING PREFERENCES</SL>
-        <div style={{marginBottom:"14px"}}>
-          <div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"6px"}}>Daily Posting Times</div>
-          <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-            {local.postingTimes.map((t,i) => (
-              <input key={i} type="time" value={t}
-                onChange={e => { const tt=[...local.postingTimes]; tt[i]=e.target.value; set("postingTimes",tt); }}
-                style={{background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"8px 10px",color:"#E8E8F0",fontSize:"13px",fontFamily:"Space Mono"}}/>
-            ))}
-          </div>
-        </div>
-        <div style={{marginBottom:"14px"}}>
-          <div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"6px"}}>Voiceover</div>
-          <select value={local.voiceId} onChange={e => set("voiceId", e.target.value)}
-            style={{background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"13px",width:"100%"}}>
-            {VOICES.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </div>
-        <div>
-          <div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"6px"}}>Target Duration (seconds)</div>
-          <input type="number" value={local.targetDuration} min={30} max={90}
-            onChange={e => set("targetDuration", +e.target.value)}
-            style={{background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"13px",fontFamily:"Space Mono",width:"100px"}}/>
-        </div>
+        <div style={{marginBottom:"14px"}}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"6px"}}>Daily Posting Times</div><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{local.postingTimes.map((t,i)=><input key={i} type="time" value={t} onChange={e=>{const tt=[...local.postingTimes];tt[i]=e.target.value;set("postingTimes",tt);}} style={{background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"8px 10px",color:"#E8E8F0",fontSize:"13px",fontFamily:"Space Mono"}}/>)}</div></div>
+        <div style={{marginBottom:"14px"}}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"6px"}}>Target Duration (seconds)</div><input type="number" value={local.targetDuration} min={30} max={90} onChange={e=>set("targetDuration",+e.target.value)} style={{background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"13px",fontFamily:"Space Mono",width:"100px"}}/></div>
       </Card>
 
-      {/* Instagram toggle */}
+      {/* Instagram */}
       <div style={{border:"2px dashed "+(local.instagramEnabled?"#E1306C44":"#222"),borderRadius:"14px",padding:"18px",background:local.instagramEnabled?"#110009":"transparent"}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"12px",marginBottom:local.instagramEnabled?"16px":"0"}}>
-          <div style={{flex:1}}>
-            <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-              <span>📸</span>
-              <span style={{fontWeight:800,fontSize:"15px"}}>Instagram Reposting</span>
-              <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#444",background:"#111",border:"1px solid #222",padding:"2px 7px",borderRadius:"10px"}}>PHASE 2</span>
-            </div>
-            <p style={{fontSize:"12px",color:"#555",lineHeight:1.6}}>
-              {local.instagramEnabled ? "Active — same videos repost via Buffer. Traffic flows Instagram to YouTube only." : "Off — YouTube only for now. Enable once you are making money."}
-            </p>
-          </div>
-          <button onClick={() => set("instagramEnabled", !local.instagramEnabled)}
-            style={{padding:"10px 20px",borderRadius:"10px",fontFamily:"Syne",fontWeight:800,fontSize:"13px",cursor:"pointer",border:"none",...(local.instagramEnabled?{background:"#E1306C",color:"#fff"}:{background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",color:"#fff"})}}>
-            {local.instagramEnabled ? "Disable" : "Add Instagram"}
-          </button>
+          <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}><span>📸</span><span style={{fontWeight:800,fontSize:"15px"}}>Instagram Reposting</span><span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#444",background:"#111",border:"1px solid #222",padding:"2px 7px",borderRadius:"10px"}}>PHASE 2</span></div><p style={{fontSize:"12px",color:"#555",lineHeight:1.6}}>{local.instagramEnabled?"Active — reposts via Buffer. Traffic flows Instagram → YouTube.":"Off — enable once you are making money."}</p></div>
+          <button onClick={()=>set("instagramEnabled",!local.instagramEnabled)} style={{padding:"10px 20px",borderRadius:"10px",fontFamily:"Syne",fontWeight:800,fontSize:"13px",cursor:"pointer",border:"none",...(local.instagramEnabled?{background:"#E1306C",color:"#fff"}:{background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",color:"#fff"})}}>{local.instagramEnabled?"Disable":"Add Instagram"}</button>
         </div>
-        {local.instagramEnabled && (
-          <div style={{display:"flex",flexDirection:"column",gap:"10px",paddingTop:"16px",borderTop:"1px solid #2a0015"}}>
-            <SL color="#E1306C">BUFFER CREDENTIALS</SL>
-            {[
-              {key:"bufferKey",                label:"Buffer Access Token",        type:"password", hint:"buffer.com/developers → Create App → Access Token"},
-              {key:"bufferInstagramProfileId", label:"Buffer Instagram Profile ID", type:"text",    hint:"GET api.bufferapp.com/1/profiles.json?access_token=..."},
-            ].map(f => (
-              <div key={f.key}>
-                <div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div>
-                <input type={f.type} value={local[f.key]||""} onChange={e => set(f.key, e.target.value)} placeholder={f.hint}
-                  style={{width:"100%",background:"#0A0A12",border:"1px solid #2a0015",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"13px"}}/>
-              </div>
-            ))}
-          </div>
-        )}
+        {local.instagramEnabled&&<div style={{display:"flex",flexDirection:"column",gap:"10px",paddingTop:"16px",borderTop:"1px solid #2a0015"}}><SL color="#E1306C">BUFFER CREDENTIALS</SL>{[{key:"bufferKey",label:"Buffer Access Token",type:"password",hint:"buffer.com/developers"},{key:"bufferInstagramProfileId",label:"Buffer Instagram Profile ID",type:"text",hint:"GET api.bufferapp.com/1/profiles.json"}].map(f=><div key={f.key}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"#0A0A12",border:"1px solid #2a0015",borderRadius:"8px",padding:"10px 12px",color:"#E8E8F0",fontSize:"13px"}}/></div>)}</div>}
       </div>
 
-      {/* Memory */}
-      <Card>
-        <SL>MEMORY AND STORAGE</SL>
-        <p style={{fontSize:"13px",color:"#888",lineHeight:1.75,marginBottom:"12px"}}>
-          All data saves automatically. With Supabase connected, everything syncs across all your devices. Without it, data lives in this browser only.
-        </p>
-        <Btn variant="danger" onClick={onReset}>Reset Schedule</Btn>
-      </Card>
+      <Card><SL>MEMORY AND STORAGE</SL><p style={{fontSize:"13px",color:"#888",lineHeight:1.75,marginBottom:"12px"}}>All data saves automatically. Supabase syncs across devices. Without it, data lives in this browser only.</p><Btn variant="danger" onClick={onReset}>Reset Schedule</Btn></Card>
     </div>
   );
 }
 
 // ── App Root ───────────────────────────────────────────────────
-const TABS = [
-  {id:"command",   label:"Overview"},
-  {id:"planner",   label:"Planner"},
-  {id:"engine",    label:"Engine"},
-  {id:"analytics", label:"Analytics"},
-  {id:"setup",     label:"Setup"},
-];
+const TABS=[{id:"command",label:"Overview"},{id:"planner",label:"Planner"},{id:"engine",label:"Engine"},{id:"analytics",label:"Analytics"},{id:"setup",label:"Setup"}];
 
 function App() {
-  const [tab, setTab] = useState("command");
+  const [tab,setTab]=useState("command");
+  const [weeks,setWeeksRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_weeks");return s?JSON.parse(s):INIT_WEEKS;}catch{return INIT_WEEKS;}});
+  const [settings,setSettingsRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_settings");return s?JSON.parse(s):INIT_SETTINGS;}catch{return INIT_SETTINGS;}});
+  const [lastInsight,setLastInsightRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_insight");return s?JSON.parse(s):null;}catch{return null;}});
+  const [syncStatus,setSyncStatus]=useState("");
+  const [sbReady,setSbReady]=useState(false);
 
-  const [weeks, setWeeksRaw] = useState(() => {
-    try { const s = localStorage.getItem("r00m_weeks"); return s ? JSON.parse(s) : INIT_WEEKS; }
-    catch { return INIT_WEEKS; }
-  });
-  const [settings, setSettingsRaw] = useState(() => {
-    try { const s = localStorage.getItem("r00m_settings"); return s ? JSON.parse(s) : INIT_SETTINGS; }
-    catch { return INIT_SETTINGS; }
-  });
-  const [lastInsight, setLastInsightRaw] = useState(() => {
-    try { const s = localStorage.getItem("r00m_insight"); return s ? JSON.parse(s) : null; }
-    catch { return null; }
-  });
-
-  const [syncStatus, setSyncStatus] = useState("");
-  const [sbReady,    setSbReady]    = useState(false);
-
-  // On mount: load from Supabase if configured
-  useEffect(() => {
-    const url = settings.supabaseUrl;
-    const key = settings.supabaseKey;
-    const ch  = settings.channelKey;
-    if (url && key && ch) {
+  useEffect(()=>{
+    const {supabaseUrl,supabaseKey,channelKey}=settings;
+    if(supabaseUrl&&supabaseKey&&channelKey){
       setSyncStatus("syncing");
-      sbLoad(url, key, ch).then(function(data) {
-        if (data) {
-          if (data.weeks)   setWeeksRaw(data.weeks);
-          if (data.insight) setLastInsightRaw(data.insight);
-          if (data.settings) {
-            setSettingsRaw(function(prev) {
-              return {...data.settings, supabaseUrl:prev.supabaseUrl, supabaseKey:prev.supabaseKey, channelKey:prev.channelKey};
-            });
-          }
+      sbLoad(supabaseUrl,supabaseKey,channelKey).then(data=>{
+        if(data){
+          if(data.weeks) setWeeksRaw(prev=>{
+            // Don't overwrite videoBlob (not serializable) — keep local blobs
+            return data.weeks.map((w,i)=>({...w,slots:(w.slots||[]).map(s=>({...s,videoBlob:null,videoUrl:null}))}));
+          });
+          if(data.insight) setLastInsightRaw(data.insight);
+          if(data.settings) setSettingsRaw(prev=>({...data.settings,supabaseUrl:prev.supabaseUrl,supabaseKey:prev.supabaseKey,channelKey:prev.channelKey}));
           setSyncStatus("synced");
-        } else {
-          setSyncStatus("new");
-        }
+        } else { setSyncStatus("new"); }
         setSbReady(true);
       });
-    } else {
-      setSbReady(true);
-    }
-  }, []);
+    } else { setSbReady(true); }
+  },[]);
 
-  // Save to localStorage
-  useEffect(() => { try { localStorage.setItem("r00m_weeks",    JSON.stringify(weeks));   } catch {} }, [weeks]);
-  useEffect(() => { try { localStorage.setItem("r00m_settings", JSON.stringify(settings));} catch {} }, [settings]);
-  useEffect(() => { if (lastInsight) try { localStorage.setItem("r00m_insight", JSON.stringify(lastInsight)); } catch {} }, [lastInsight]);
+  useEffect(()=>{try{localStorage.setItem("r00m_weeks",JSON.stringify(weeks));}catch{}},[weeks]);
+  useEffect(()=>{try{localStorage.setItem("r00m_settings",JSON.stringify(settings));}catch{}},[settings]);
+  useEffect(()=>{if(lastInsight)try{localStorage.setItem("r00m_insight",JSON.stringify(lastInsight));}catch{}},[lastInsight]);
 
-  // Save to Supabase after initial load
-  useEffect(() => {
-    if (!sbReady) return;
-    const url = settings.supabaseUrl;
-    const key = settings.supabaseKey;
-    const ch  = settings.channelKey;
-    if (url && key && ch) {
-      sbSave(url, key, ch, {weeks, insight:lastInsight, settings});
+  useEffect(()=>{
+    if(!sbReady)return;
+    const {supabaseUrl,supabaseKey,channelKey}=settings;
+    if(supabaseUrl&&supabaseKey&&channelKey){
+      // Save weeks without videoBlob (not serializable)
+      const weeksForSave = weeks.map(w=>({...w,slots:(w.slots||[]).map(s=>({...s,videoBlob:null,videoUrl:null}))}));
+      sbSave(supabaseUrl,supabaseKey,channelKey,{weeks:weeksForSave,insight:lastInsight,settings});
       setSyncStatus("saved");
     }
-  }, [weeks, lastInsight, settings, sbReady]);
+  },[weeks,lastInsight,settings,sbReady]);
 
-  const setWeeks       = v => setWeeksRaw(v);
-  const setSettings    = v => setSettingsRaw(v);
-  const setLastInsight = v => setLastInsightRaw(v);
+  const setWeeks=v=>setWeeksRaw(v);
+  const setSettings=v=>setSettingsRaw(v);
+  const setLastInsight=v=>setLastInsightRaw(v);
 
-  const handleReset = () => {
-    if (!window.confirm("Reset schedule?\n\nThis clears all weeks and starts fresh.")) return;
-    setWeeksRaw(INIT_WEEKS);
-    setLastInsightRaw(null);
-    try { localStorage.removeItem("r00m_weeks"); localStorage.removeItem("r00m_insight"); } catch {}
-  };
+  const handleReset=()=>{if(!window.confirm("Reset everything? This clears all weeks and starts fresh."))return;setWeeksRaw(INIT_WEEKS);setLastInsightRaw(null);try{localStorage.removeItem("r00m_weeks");localStorage.removeItem("r00m_insight");}catch{}};
 
-  const draftWeek    = weeks.find(w => w.status === "draft" && w.slots && w.slots.length > 0);
-  const pendingBadge = draftWeek ? draftWeek.slots.filter(s => s.status === "pending").length : 0;
+  const draftWeek=weeks.find(w=>w.status==="draft"&&w.slots&&w.slots.length>0);
+  const pendingBadge=draftWeek?draftWeek.slots.filter(s=>s.status==="pending").length:0;
 
-  const VIEW = {
-    command:   <CommandCenter  weeks={weeks} onNavigate={setTab} instagramEnabled={settings.instagramEnabled}/>,
+  const VIEW={
+    command:   <CommandCenter  weeks={weeks} onNavigate={setTab}/>,
     planner:   <WeeklyPlanner  weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight}/>,
     engine:    <ContentEngine  weeks={weeks} setWeeks={setWeeks} settings={settings} onNavigate={setTab}/>,
     analytics: <AnalyticsBrain weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} setLastInsight={setLastInsight}/>,
@@ -1278,40 +882,27 @@ function App() {
 
   return (
     <div style={{minHeight:"100vh",background:"#08080E"}}>
-      {/* Topbar */}
       <div style={{position:"sticky",top:0,zIndex:200,background:"rgba(8,8,14,0.95)",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderBottom:"1px solid #1A1A2A",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
-
         <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
           <div style={{fontWeight:800,fontSize:"16px",letterSpacing:"-0.02em"}}>Rand00mscroll</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"8px",color:"#2a2a3a",background:"#111",border:"1px solid #1A1A2A",padding:"2px 6px",borderRadius:"4px"}}>v1</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"8px",color:"#2a2a3a",background:"#111",border:"1px solid #1A1A2A",padding:"2px 6px",borderRadius:"4px"}}>v2</div>
         </div>
-
         <div style={{flex:1,display:"flex",justifyContent:"center"}}>
           <div style={{position:"relative",width:"100%",maxWidth:"200px"}}>
-            <select value={tab} onChange={e => setTab(e.target.value)}
-              style={{width:"100%",background:"#111118",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"8px 32px 8px 14px",color:"#E8E8F0",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
-              {TABS.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.label}{t.id==="engine" && pendingBadge>0 ? " ("+pendingBadge+")" : ""}
-                </option>
-              ))}
+            <select value={tab} onChange={e=>setTab(e.target.value)} style={{width:"100%",background:"#111118",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"8px 32px 8px 14px",color:"#E8E8F0",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
+              {TABS.map(t=><option key={t.id} value={t.id}>{t.label}{t.id==="engine"&&pendingBadge>0?" ("+pendingBadge+")":""}</option>)}
             </select>
             <div style={{position:"absolute",right:"12px",top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"#ADFF2F",fontSize:"11px"}}>▾</div>
           </div>
         </div>
-
         <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
           <div style={{width:6,height:6,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
           <span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":syncStatus==="syncing"?"#FF6B35":"#ADFF2F"}}>
-            {syncStatus==="syncing" ? "SYNC" : syncStatus==="synced" ? "SYNCED" : syncStatus==="saved" ? "SAVED" : "LIVE"}
+            {syncStatus==="syncing"?"SYNC":syncStatus==="synced"?"SYNCED":syncStatus==="saved"?"SAVED":"LIVE"}
           </span>
         </div>
-
       </div>
-
-      <div style={{maxWidth:"860px",margin:"0 auto",padding:"24px 16px 80px"}}>
-        {VIEW[tab]}
-      </div>
+      <div style={{maxWidth:"860px",margin:"0 auto",padding:"24px 16px 80px"}}>{VIEW[tab]}</div>
     </div>
   );
 }
