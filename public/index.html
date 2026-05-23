@@ -14,7 +14,9 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-tap-highlight-color:transparent}
-body{font-family:'Syne',sans-serif;background:#08080E;color:#E8E8F0;min-height:100vh}
+body{font-family:'Syne',sans-serif;min-height:100vh}
+body.light{background:#F5F5F7;color:#111111}
+body.dark{background:#08080E;color:#E8E8F0}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(173,255,47,.4)}50%{box-shadow:0 0 0 8px rgba(173,255,47,0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -475,237 +477,225 @@ function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
 }
 
 // ── Content Engine ─────────────────────────────────────────────
-function ContentEngine({weeks, setWeeks, settings, onNavigate}) {
+function ContentEngine({weeks, setWeeks, settings, onNavigate, theme}) {
   const workable = weeks.filter(w=>w.slots&&w.slots.length>0&&(w.status==="draft"||w.status==="live"));
   const lastW = workable[workable.length-1];
-  const [activeId,    setActiveId]    = useState(lastW?lastW.id:null);
-  const [generating,  setGenerating]  = useState(false);
-  const [genProgress, setGenProgress] = useState(0);
-  const [genTotal,    setGenTotal]    = useState(0);
-  const [genVideos,   setGenVideos]   = useState(false);
-  const [vidProgress, setVidProgress] = useState(0);
-  const [vidTotal,    setVidTotal]    = useState(0);
-  const [vidStatus,   setVidStatus]   = useState("");
-  const [uploading,   setUploading]   = useState(false);
-  const [uploadProg,  setUploadProg]  = useState(0);
-  const [expanded,    setExpanded]    = useState(null);
-  const [ytToken,     setYtToken]     = useState(null);
-  const [ytConnected, setYtConnected] = useState(false);
-  const [ytError,     setYtError]     = useState("");
+  const [activeId,   setActiveId]   = useState(lastW?lastW.id:null);
+  const [generating, setGenerating] = useState(false);
+  const [genProgress,setGenProgress]= useState(0);
+  const [genTotal,   setGenTotal]   = useState(0);
+  const [expanded,   setExpanded]   = useState(null);
+  const [showImport, setShowImport] = useState(false);
+  const [manifest,   setManifest]   = useState("");
+  const [importErr,  setImportErr]  = useState("");
+  const [importOk,   setImportOk]   = useState(false);
+  const [exported,   setExported]   = useState(false);
 
   const activeWeek = weeks.find(w=>w.id===activeId)||workable[0];
+  const isDark = theme==="dark";
+  const cardBg   = isDark?"#111118":"#ffffff";
+  const cardBord = isDark?"#1E1E2E":"#e5e5e5";
+  const textMute = isDark?"#555":"#999";
+  const textSub  = isDark?"#888":"#666";
 
   const updateSlot=(wid,sid,up)=>setWeeks(prev=>prev.map(w=>w.id===wid?{...w,slots:w.slots.map(s=>s.id===sid?{...s,...up}:s)}:w));
 
-  // YouTube OAuth
-  const connectYouTube = () => {
-    const clientId = settings.youtubeClientId;
-    if (!clientId) { setYtError("Add your YouTube Web Client ID in Setup first"); return; }
-    setYtError("");
-    if (!window.google) { setYtError("Google Identity Services not loaded — check connection"); return; }
-    const tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: "https://www.googleapis.com/auth/youtube.upload https://www.googleapis.com/auth/youtube",
-      callback: (resp) => {
-        if (resp.error) { setYtError("Auth failed: "+resp.error); return; }
-        setYtToken(resp.access_token);
-        setYtConnected(true);
-        setYtError("");
-      },
-    });
-    tokenClient.requestAccessToken();
-  };
-
-  // Generate all scripts
-  const generateAll = async() => {
-    if (!activeWeek||!activeWeek.slots) return;
-    const pending = activeWeek.slots.filter(s=>s.status==="pending");
-    if (!pending.length) return;
-    setGenerating(true); setGenTotal(pending.length); setGenProgress(0);
-    for (let i=0; i<pending.length; i+=3) {
-      const batch = pending.slice(i,i+3);
-      try {
-        const slotInfo = batch.map(s=>({topic:s.topic||activeWeek.topic||"general",contentType:s.contentType}));
-        const scripts = await genScripts(slotInfo, activeWeek.evolvedPrompt);
-        batch.forEach((slot,j)=>{ if(scripts[j]) updateSlot(activeWeek.id,slot.id,{script:scripts[j],status:"script_ready"}); });
-      } catch(e){ console.error(e); }
+  const generateAll=async()=>{
+    if(!activeWeek||!activeWeek.slots)return;
+    const pending=activeWeek.slots.filter(s=>s.status==="pending");
+    if(!pending.length)return;
+    setGenerating(true);setGenTotal(pending.length);setGenProgress(0);
+    for(let i=0;i<pending.length;i+=3){
+      const batch=pending.slice(i,i+3);
+      try{
+        const slotInfo=batch.map(s=>({topic:s.topic||activeWeek.topic||"general",contentType:s.contentType}));
+        const scripts=await genScripts(slotInfo,activeWeek.evolvedPrompt);
+        batch.forEach((slot,j)=>{if(scripts[j])updateSlot(activeWeek.id,slot.id,{script:scripts[j],status:"script_ready"});});
+      }catch(e){console.error(e);}
       setGenProgress(Math.min(i+3,pending.length));
     }
     setGenerating(false);
   };
 
-  // Generate all videos in browser
-  const generateAllVideos = async() => {
-    if (!activeWeek) return;
-    const scriptReady = activeWeek.slots.filter(s=>s.status==="script_ready"&&s.script);
-    if (!scriptReady.length) return;
-    setGenVideos(true); setVidTotal(scriptReady.length); setVidProgress(0); setVidStatus("");
-    for (let i=0; i<scriptReady.length; i++) {
-      const slot = scriptReady[i];
-      setVidStatus("Generating: "+slot.script.title);
-      try {
-        const blob = await generateVideoBlob(slot);
-        const url  = URL.createObjectURL(blob);
-        updateSlot(activeWeek.id, slot.id, {videoBlob:blob, videoUrl:url, status:"video_ready"});
-      } catch(e) {
-        console.error("Video gen failed for slot", slot.id, e);
-        updateSlot(activeWeek.id, slot.id, {status:"video_failed"});
-      }
-      setVidProgress(i+1);
-    }
-    setVidStatus("");
-    setGenVideos(false);
+  const doExport=()=>{
+    if(!activeWeek)return;
+    const jobs=activeWeek.slots.map(s=>({
+      jobId:s.id, weekId:activeWeek.id, niche:activeWeek.niche, topic:s.topic||activeWeek.topic,
+      day:DAYS[s.day], time:TIMES[s.time], contentType:s.contentType,
+      voiceId:settings.voiceId||"en-US-ChristopherNeural",
+      targetDuration:settings.targetDuration||55,
+      script:s.script?s.script.script:"",
+      hook:s.script?s.script.hook:"",
+      title:s.script?s.script.title:"",
+      ytCaption:s.script?s.script.ytCaption:"",
+      keywords:s.keywords||[],
+      footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration})),
+      instagramEnabled:settings.instagramEnabled||false,
+    }));
+    const blob=new Blob([JSON.stringify(jobs,null,2)],{type:"application/json"});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=url;a.download="week"+activeWeek.id+"_jobs.json";a.click();
+    URL.revokeObjectURL(url);setExported(true);
   };
 
-  // Upload all to YouTube
-  const uploadAll = async() => {
-    if (!ytToken||!activeWeek) return;
-    const ready = activeWeek.slots.filter(s=>s.status==="video_ready"&&s.videoBlob&&s.scheduleStatus==="unscheduled");
-    if (!ready.length) return;
-    setUploading(true); setUploadProg(0);
-    for (let i=0; i<ready.length; i++) {
-      const slot = ready[i];
-      try {
-        const publishAt = buildPublishTime(DAYS[slot.day], TIMES[slot.time], 7);
-        const videoId   = await uploadToYouTube(slot.videoBlob, slot, ytToken, publishAt);
-        if (videoId) updateSlot(activeWeek.id, slot.id, {youtubeId:videoId, scheduleStatus:"youtube_done", status:"scheduled"});
-      } catch(e) {
-        console.error("Upload failed:", e);
-        if (e.message && e.message.includes("401")) { setYtConnected(false); setYtToken(null); setUploading(false); setYtError("Token expired — reconnect YouTube"); return; }
-      }
-      setUploadProg(i+1);
-    }
-    setUploading(false);
+  const doImport=()=>{
+    setImportErr("");setImportOk(false);
+    try{
+      const m=JSON.parse(manifest);
+      if(!Array.isArray(m))throw new Error();
+      setWeeks(prev=>prev.map(w=>{
+        if(w.id!==activeWeek.id)return w;
+        return{...w,slots:w.slots.map(s=>{
+          const e=m.find(x=>x.jobId===s.id);
+          return e?{...s,youtubeId:e.youtubeId||s.youtubeId,scheduleStatus:e.scheduleStatus||s.scheduleStatus,igScheduled:e.igScheduled||s.igScheduled}:s;
+        })};
+      }));
+      setImportOk(true);setShowImport(false);setManifest("");
+    }catch{setImportErr("Invalid JSON — paste the manifest.json from the pipeline");}
   };
 
-  if (!workable.length) return (
+  if(!workable.length) return(
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
       <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
-      <Card><SL>NO WEEKS LOCKED YET</SL><p style={{fontSize:"13px",color:"#555",lineHeight:1.75,marginBottom:"14px"}}>Go to <strong style={{color:"#ADFF2F"}}>Planner</strong> to lock a week first.</p><Btn small variant="green" onClick={()=>onNavigate("planner")}>Go to Planner</Btn></Card>
+      <div style={{background:cardBg,border:"1px solid "+cardBord,borderRadius:"12px",padding:"18px"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:textMute,letterSpacing:"0.1em",marginBottom:"12px"}}>NO WEEKS LOCKED YET</div>
+        <p style={{fontSize:"13px",color:textSub,lineHeight:1.75,marginBottom:"14px"}}>Go to <strong style={{color:"#ADFF2F"}}>Planner</strong> to lock a week first.</p>
+        <button onClick={()=>onNavigate("planner")} style={{background:"#0D1A0D",color:"#ADFF2F",border:"1px solid #ADFF2F44",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>Go to Planner</button>
+      </div>
     </div>
   );
 
   const slots       = activeWeek?activeWeek.slots:[];
   const pendingCt   = slots.filter(s=>s.status==="pending").length;
   const scriptCt    = slots.filter(s=>s.status==="script_ready"&&s.script).length;
-  const videoCt     = slots.filter(s=>s.status==="video_ready"||s.status==="scheduled").length;
   const scheduledCt = slots.filter(s=>s.scheduleStatus==="youtube_done").length;
-  const uploadReady = slots.filter(s=>s.status==="video_ready"&&s.scheduleStatus==="unscheduled").length;
+  const SC  = {pending:"#2a2a3a",script_ready:"#FF6B35",keywords_extracted:"#00CFFF",footage_found:"#B06EF3",scheduled:"#ADFF2F"};
+  const SLM = {pending:"PENDING",script_ready:"SCRIPT ✓",scheduled:"ON YT ✓"};
 
-  const SC  = {pending:"#2a2a3a",script_ready:"#FF6B35",video_ready:"#B06EF3",video_failed:"#FF2D6B",scheduled:"#ADFF2F"};
-  const SLM = {pending:"PENDING",script_ready:"SCRIPT ✓",video_ready:"VIDEO ✓",video_failed:"FAILED",scheduled:"ON YT ✓"};
+  const stepCard = (active, done, children) => ({
+    background: done?"#0A1A0A":active?cardBg:isDark?"#0A0A0E":"#f8f8f8",
+    border: "1px solid "+(done?"#ADFF2F33":active?"#ADFF2F":cardBord),
+    borderRadius:"12px", padding:"18px", transition:"all .3s",
+  });
 
-  return (
+  return(
     <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:"10px"}}>
-        <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2><p style={{color:"#555",fontSize:"13px",marginTop:"3px"}}>Scripts → Videos → YouTube — all in browser</p></div>
+      <div>
+        <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
+        <p style={{color:textSub,fontSize:"13px",marginTop:"3px"}}>Scripts → Export → Pipeline → YouTube via Buffer</p>
       </div>
 
-      {workable.length>1&&<div style={{display:"flex",gap:"4px",background:"#111118",border:"1px solid #1A1A2A",padding:"4px",borderRadius:"10px",alignSelf:"flex-start"}}>{workable.map(w=><button key={w.id} onClick={()=>{setActiveId(w.id);setExpanded(null);}} style={{background:activeId===w.id?"#ADFF2F":"transparent",color:activeId===w.id?"#08080E":"#555",border:"none",padding:"6px 12px",borderRadius:"7px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>Week {w.id}</button>)}</div>}
+      {workable.length>1&&<div style={{display:"flex",gap:"4px",background:isDark?"#111118":"#f0f0f0",border:"1px solid "+cardBord,padding:"4px",borderRadius:"10px",alignSelf:"flex-start"}}>{workable.map(w=><button key={w.id} onClick={()=>{setActiveId(w.id);setExpanded(null);setExported(false);setImportOk(false);}} style={{background:activeId===w.id?"#ADFF2F":"transparent",color:activeId===w.id?"#08080E":textSub,border:"none",padding:"6px 12px",borderRadius:"7px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>Week {w.id}</button>)}</div>}
 
-      {activeWeek&&<div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"10px 14px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}><Tag color="#FF6B35">Week {activeWeek.id}</Tag><Tag color="#B06EF3">{activeWeek.niche}</Tag>{(activeWeek.topics||[]).map((t,i)=><Tag key={i} color="#555">T{i+1}: {t.slice(0,22)}</Tag>)}</div>}
+      {activeWeek&&<div style={{background:isDark?"#0A0A12":"#f5f5f5",border:"1px solid "+cardBord,borderRadius:"10px",padding:"10px 14px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+        <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#FF6B35",background:"#FF6B3518",border:"1px solid #FF6B3544",padding:"3px 9px",borderRadius:"20px"}}>Week {activeWeek.id}</span>
+        <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#B06EF3",background:"#B06EF318",border:"1px solid #B06EF344",padding:"3px 9px",borderRadius:"20px"}}>{activeWeek.niche}</span>
+        {(activeWeek.topics||[]).map((t,i)=><span key={i} style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",background:"#55551a",border:"1px solid #55554a",padding:"3px 9px",borderRadius:"20px"}}>T{i+1}: {t.slice(0,22)}</span>)}
+      </div>}
 
-      {/* Stats */}
+      {/* Progress overview */}
       <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-        <StatBox label="Scripts" value={scriptCt+"/21"} sub="written" accent="#FF6B35"/>
-        <StatBox label="Videos"  value={videoCt+"/21"} sub="generated" accent="#B06EF3"/>
-        <StatBox label="On YouTube" value={scheduledCt+"/21"} sub="scheduled" accent="#ADFF2F"/>
-        <StatBox label="Pending" value={pendingCt} sub="scripts" accent={pendingCt>0?"#555":"#ADFF2F"}/>
+        <div style={{flex:1,minWidth:"90px",background:cardBg,border:"1px solid "+cardBord,borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:"#FF6B35",lineHeight:1}}>{scriptCt}/21</div><div style={{fontSize:"11px",color:textSub,fontWeight:600,marginTop:"5px"}}>Scripts</div></div>
+        <div style={{flex:1,minWidth:"90px",background:cardBg,border:"1px solid "+cardBord,borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:exported?"#ADFF2F":"#555",lineHeight:1}}>{exported?"✓":"—"}</div><div style={{fontSize:"11px",color:textSub,fontWeight:600,marginTop:"5px"}}>Exported</div></div>
+        <div style={{flex:1,minWidth:"90px",background:cardBg,border:"1px solid "+cardBord,borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:"#ADFF2F",lineHeight:1}}>{scheduledCt}/21</div><div style={{fontSize:"11px",color:textSub,fontWeight:600,marginTop:"5px"}}>On YouTube</div></div>
+        <div style={{flex:1,minWidth:"90px",background:cardBg,border:"1px solid "+cardBord,borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:pendingCt>0?"#FF2D6B":"#ADFF2F",lineHeight:1}}>{pendingCt}</div><div style={{fontSize:"11px",color:textSub,fontWeight:600,marginTop:"5px"}}>Pending</div></div>
       </div>
 
-      {/* Step 1 — Scripts */}
-      <Card accent={scriptCt===21?"#ADFF2F22":"#1E1E2E"}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
-          <div><SL color={scriptCt===21?"#ADFF2F":"#555"}>STEP 1 — GENERATE SCRIPTS</SL></div>
+      {/* STEP 1 — Scripts */}
+      <div style={stepCard(pendingCt>0, scriptCt===21)}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:scriptCt===21?"#ADFF2F":textMute,letterSpacing:"0.1em",marginBottom:"6px"}}>STEP 1 — GENERATE SCRIPTS</div>
+            {scriptCt>0&&<div style={{background:"#1A1A2A",borderRadius:"4px",height:"4px",width:"200px"}}><div style={{width:(scriptCt/21*100)+"%",height:"100%",background:"#FF6B35",borderRadius:"4px",transition:"width .5s"}}/></div>}
+          </div>
           {generating
-            ? <div style={{display:"flex",alignItems:"center",gap:"8px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"8px 12px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
-            : <Btn small onClick={generateAll} disabled={!pendingCt}>{pendingCt?"Generate "+pendingCt+" Scripts":"All Scripts Done ✓"}</Btn>
+            ?<div style={{display:"flex",alignItems:"center",gap:"8px",background:isDark?"#111118":"#f0f0f0",border:"1px solid "+cardBord,borderRadius:"8px",padding:"8px 12px"}}><span style={{display:"inline-block",width:12,height:12,border:"2px solid #ADFF2F",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite"}}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
+            :<button onClick={generateAll} disabled={!pendingCt} style={{background:!pendingCt?"#1c1c28":"#ADFF2F",color:!pendingCt?"#444":"#08080E",border:"none",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:!pendingCt?"not-allowed":"pointer"}}>{pendingCt?"Generate "+pendingCt+" Scripts":"All Scripts Done ✓"}</button>
           }
         </div>
-        {scriptCt>0&&<div style={{background:"#1A1A2A",borderRadius:"4px",height:"4px"}}><div style={{width:(scriptCt/21*100)+"%",height:"100%",background:"#FF6B35",borderRadius:"4px",transition:"width .5s"}}/></div>}
-      </Card>
+      </div>
 
-      {/* Step 2 — Generate Videos */}
-      <Card accent={videoCt===21?"#B06EF344":"#1E1E2E"}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:genVideos?"10px":"0"}}>
-          <div><SL color={videoCt===21?"#B06EF3":"#555"}>STEP 2 — GENERATE VIDEOS IN BROWSER</SL><p style={{fontSize:"12px",color:"#555",marginTop:"-6px",marginBottom:"8px"}}>Canvas animation · word-by-word text · no external tools</p></div>
-          {genVideos
-            ? <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:"4px"}}><div style={{display:"flex",alignItems:"center",gap:"8px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"8px 12px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#B06EF3"}}>{vidProgress}/{vidTotal}</span></div>{vidStatus&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#555",maxWidth:"140px",textAlign:"right",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{vidStatus}</div>}</div>
-            : <Btn small variant="ghost" onClick={generateAllVideos} disabled={!scriptCt||!!genVideos}>{videoCt===21?"All Videos Done ✓":scriptCt>0?"Generate "+scriptCt+" Videos":"Generate Scripts First"}</Btn>
+      {/* STEP 2 — Export Jobs */}
+      <div style={stepCard(scriptCt===21&&!exported, exported)}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:exported?"#ADFF2F":textMute,letterSpacing:"0.1em",marginBottom:"4px"}}>STEP 2 — EXPORT JOBS FILE</div>
+            <p style={{fontSize:"12px",color:textSub}}>Downloads week{activeWeek?.id}_jobs.json — give this to the pipeline</p>
+          </div>
+          <button onClick={doExport} disabled={!scriptCt} style={{background:!scriptCt?"#1c1c28":exported?"#0D1A0D":"#ADFF2F",color:!scriptCt?"#444":exported?"#ADFF2F":"#08080E",border:exported?"1px solid #ADFF2F44":"none",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:!scriptCt?"not-allowed":"pointer"}}>{exported?"✓ Exported":"↓ Export Jobs"}</button>
+        </div>
+        {exported&&<div style={{marginTop:"12px",background:isDark?"#0A0A12":"#f0f0f0",border:"1px solid "+cardBord,borderRadius:"8px",padding:"12px 14px"}}>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>RUN PIPELINE ON WINDOWS LAPTOP</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"11px",color:textSub,lineHeight:2}}>
+            <div>1. Move <span style={{color:"#00CFFF"}}>week{activeWeek?.id}_jobs.json</span> to your pipeline folder</div>
+            <div>2. Open Claude Code in that folder and say:</div>
+            <div style={{color:"#ADFF2F",marginLeft:"16px"}}>"Run the pipeline with week{activeWeek?.id}_jobs.json"</div>
+            <div>3. Pipeline assembles videos + uploads via Buffer automatically</div>
+            <div>4. When done, import manifest.json below ↓</div>
+          </div>
+        </div>}
+      </div>
+
+      {/* STEP 3 — Import Results */}
+      <div style={stepCard(exported&&scheduledCt===0, scheduledCt===21)}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showImport?"12px":"0"}}>
+          <div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:scheduledCt===21?"#ADFF2F":textMute,letterSpacing:"0.1em",marginBottom:"4px"}}>STEP 3 — IMPORT RESULTS</div>
+            <p style={{fontSize:"12px",color:textSub}}>
+              {scheduledCt===21?"All 21 videos scheduled on YouTube ✓":"After pipeline runs, paste manifest.json here to sync status"}
+            </p>
+          </div>
+          {scheduledCt<21
+            ?<button onClick={()=>setShowImport(!showImport)} style={{background:"transparent",color:"#ADFF2F",border:"1px solid #ADFF2F44",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>{importOk?"✓ Synced":"Import Results"}</button>
+            :<div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/><span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>Live on YouTube</span></div>
           }
         </div>
-        {videoCt>0&&<div style={{background:"#1A1A2A",borderRadius:"4px",height:"4px"}}><div style={{width:(videoCt/21*100)+"%",height:"100%",background:"#B06EF3",borderRadius:"4px",transition:"width .5s"}}/></div>}
-        {!window.MediaRecorder&&<div style={{marginTop:"10px",fontSize:"12px",color:"#FF2D6B",fontFamily:"Space Mono"}}>⚠ Use Chrome browser — MediaRecorder required for video generation</div>}
-      </Card>
+        {showImport&&<div>
+          <textarea value={manifest} onChange={e=>setManifest(e.target.value)} rows={4}
+            placeholder='[{"jobId":"abc","scheduleStatus":"youtube_done","bufferUpdateId":"xxx"},...]'
+            style={{width:"100%",background:isDark?"#111":"#f5f5f5",border:"1px solid "+cardBord,borderRadius:"8px",padding:"10px",color:isDark?"#E8E8F0":"#111",fontSize:"12px",fontFamily:"Space Mono",lineHeight:1.6,marginBottom:"10px"}}/>
+          {importErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px"}}>{importErr}</div>}
+          <div style={{display:"flex",gap:"8px"}}>
+            <button onClick={doImport} style={{background:"#ADFF2F",color:"#08080E",border:"none",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>Import and Sync</button>
+            <button onClick={()=>{setShowImport(false);setManifest("");setImportErr("");}} style={{background:"transparent",color:textSub,border:"1px solid "+cardBord,fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>Cancel</button>
+          </div>
+        </div>}
+      </div>
 
-      {/* Step 3 — Upload to YouTube */}
-      <Card accent={scheduledCt===21?"#ADFF2F44":"#1E1E2E"}>
-        <SL color={scheduledCt===21?"#ADFF2F":"#555"}>STEP 3 — UPLOAD TO YOUTUBE</SL>
-        {!ytConnected
-          ? <div>
-              <p style={{fontSize:"13px",color:"#888",marginBottom:"12px",lineHeight:1.7}}>Connect your YouTube account to upload all videos with one tap. Videos upload as private and publish automatically at your scheduled times.</p>
-              {ytError&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px",fontFamily:"Space Mono"}}>{ytError}</div>}
-              <Btn onClick={connectYouTube} disabled={!settings.youtubeClientId}>
-                {settings.youtubeClientId?"Connect YouTube Account":"Add YouTube Client ID in Setup first"}
-              </Btn>
-            </div>
-          : <div>
-              <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}>
-                <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
-                <span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>YouTube Connected</span>
-                <Btn small variant="ghost" onClick={()=>{setYtConnected(false);setYtToken(null);}}>Disconnect</Btn>
-              </div>
-              {uploading
-                ? <div style={{display:"flex",alignItems:"center",gap:"10px",background:"#111118",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px"}}><Spinner/><span style={{fontFamily:"Space Mono",fontSize:"12px",color:"#ADFF2F"}}>Uploading {uploadProg}/{uploadReady}...</span></div>
-                : <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-                    {uploadReady>0&&<Btn onClick={uploadAll}>{scheduledCt===0?"Upload All "+uploadReady+" Videos →":"Upload Remaining ("+uploadReady+")"}</Btn>}
-                    {scheduledCt===21&&<div style={{display:"flex",alignItems:"center",gap:"8px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F"}}/>  <span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>All 21 videos scheduled on YouTube ✓</span></div>}
-                    {uploadReady===0&&scheduledCt<21&&videoCt<21&&<p style={{fontFamily:"Space Mono",fontSize:"11px",color:"#444"}}>Generate videos in Step 2 first</p>}
-                  </div>
-              }
-            </div>
-        }
-      </Card>
-
-      {/* Slots list */}
+      {/* Slot list */}
       {DAYS.map((day,dayIdx)=>{
         const daySlots=slots.filter(s=>s.day===dayIdx);
         const dayReady=daySlots.filter(s=>s.status!=="pending").length;
         const daySched=daySlots.filter(s=>s.scheduleStatus==="youtube_done").length;
-        return (
+        return(
           <div key={day}>
-            <SL>{day.toUpperCase()} — {dayReady}/3 scripts · {daySched}/3 on YouTube</SL>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:textMute,letterSpacing:"0.1em",marginBottom:"8px"}}>{day.toUpperCase()} — {dayReady}/3 scripts · {daySched}/3 on YouTube</div>
             <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
               {daySlots.map(slot=>{
                 const ct=CTYPES.find(t=>t.id===slot.contentType);
-                return (
-                  <div key={slot.id} style={{background:"#0A0A12",border:"1px solid "+(expanded===slot.id?"#ADFF2F33":"#1A1A2A"),borderRadius:"10px",overflow:"hidden"}}>
+                return(
+                  <div key={slot.id} style={{background:isDark?"#0A0A12":"#f8f8f8",border:"1px solid "+(expanded===slot.id?"#ADFF2F33":cardBord),borderRadius:"10px",overflow:"hidden"}}>
                     <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",cursor:"pointer"}} onClick={()=>setExpanded(expanded===slot.id?null:slot.id)}>
-                      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",width:"50px",flexShrink:0}}>{TIMES[slot.time]}</div>
+                      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:textMute,width:"50px",flexShrink:0}}>{TIMES[slot.time]}</div>
                       <div style={{width:6,height:6,borderRadius:"50%",background:SC[slot.status]||"#2a2a3a",flexShrink:0}}/>
-                      <div style={{flex:1,fontSize:"13px",fontWeight:slot.script?600:400,color:slot.script?"#E8E8F0":"#555",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      <div style={{flex:1,fontSize:"13px",fontWeight:slot.script?600:400,color:slot.script?isDark?"#E8E8F0":"#111":textMute,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
                         {slot.script?slot.script.title:(slot.topic||"Waiting...")}
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
                         {slot.scheduleStatus==="youtube_done"&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F"}}>YT✓</span>}
                         {ct&&<span style={{fontSize:"11px",color:ct.color,fontWeight:700}}>{ct.label}</span>}
-                        <span style={{fontFamily:"Space Mono",fontSize:"9px",color:SC[slot.status]||"#333"}}>{SLM[slot.status]||slot.status}</span>
                       </div>
                     </div>
                     {expanded===slot.id&&slot.script&&(
-                      <div style={{padding:"0 12px 12px",borderTop:"1px solid #1A1A2A"}}>
-                        <div style={{background:"#0d0d12",borderRadius:"8px",padding:"12px",margin:"10px 0"}}>
-                          <div style={{fontSize:"10px",color:"#555",fontWeight:700,marginBottom:"4px"}}>HOOK</div>
+                      <div style={{padding:"0 12px 12px",borderTop:"1px solid "+cardBord}}>
+                        <div style={{background:isDark?"#0d0d12":"#f0f0f0",borderRadius:"8px",padding:"12px",margin:"10px 0"}}>
+                          <div style={{fontSize:"10px",color:textMute,fontWeight:700,marginBottom:"4px"}}>HOOK</div>
                           <div style={{fontSize:"13px",color:"#ADFF2F",fontStyle:"italic",marginBottom:"10px"}}>"{slot.script.hook}"</div>
-                          <div style={{fontSize:"10px",color:"#555",fontWeight:700,marginBottom:"4px"}}>SCRIPT</div>
-                          <div style={{fontSize:"13px",color:"#CCC",lineHeight:1.7}}>{slot.script.script}</div>
+                          <div style={{fontSize:"10px",color:textMute,fontWeight:700,marginBottom:"4px"}}>SCRIPT</div>
+                          <div style={{fontSize:"13px",color:isDark?"#CCC":"#333",lineHeight:1.7}}>{slot.script.script}</div>
+                          {slot.script.ytCaption&&<><div style={{fontSize:"10px",color:textMute,fontWeight:700,marginTop:"10px",marginBottom:"4px"}}>CAPTION</div><div style={{fontSize:"11px",color:textSub,fontFamily:"Space Mono"}}>{slot.script.ytCaption}</div></>}
                         </div>
-                        {slot.youtubeId&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"6px",padding:"7px 10px",fontSize:"11px",fontFamily:"Space Mono",color:"#ADFF2F",marginBottom:"8px"}}>youtube.com/watch?v={slot.youtubeId}</div>}
-                        {slot.videoUrl&&!slot.youtubeId&&(
-                          <div style={{marginTop:"8px",display:"flex",gap:"8px"}}>
-                            <a href={slot.videoUrl} download={"video_"+slot.id+".webm"} style={{background:"#111118",border:"1px solid #1E1E2E",color:"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",textDecoration:"none",display:"inline-flex",alignItems:"center",gap:"4px"}}>↓ Download</a>
-                          </div>
-                        )}
+                        {slot.youtubeId&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"6px",padding:"7px 10px",fontSize:"11px",fontFamily:"Space Mono",color:"#ADFF2F"}}>youtube.com/watch?v={slot.youtubeId}</div>}
                       </div>
                     )}
                   </div>
@@ -831,6 +821,15 @@ function App() {
   const [lastInsight,setLastInsightRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_insight");return s?JSON.parse(s):null;}catch{return null;}});
   const [syncStatus,setSyncStatus]=useState("");
   const [sbReady,setSbReady]=useState(false);
+  const [theme,setTheme]=useState(()=>{
+    try{return localStorage.getItem("r00m_theme")||"light";}catch{return "light";}
+  });
+
+  // Apply theme to body
+  useEffect(()=>{
+    document.body.className=theme;
+    try{localStorage.setItem("r00m_theme",theme);}catch{}
+  },[theme]);
 
   useEffect(()=>{
     const {supabaseUrl,supabaseKey,channelKey}=settings;
@@ -875,37 +874,47 @@ function App() {
   const draftWeek=weeks.find(w=>w.status==="draft"&&w.slots&&w.slots.length>0);
   const pendingBadge=draftWeek?draftWeek.slots.filter(s=>s.status==="pending").length:0;
 
+  const isDark = theme==="dark";
+  const bg     = isDark?"#08080E":"#F5F5F7";
+  const fg     = isDark?"#E8E8F0":"#111111";
+
   const VIEW={
-    command:   <CommandCenter  weeks={weeks} onNavigate={setTab}/>,
-    planner:   <WeeklyPlanner  weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight}/>,
-    engine:    <ContentEngine  weeks={weeks} setWeeks={setWeeks} settings={settings} onNavigate={setTab}/>,
-    analytics: <AnalyticsBrain weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} setLastInsight={setLastInsight}/>,
-    setup:     <Setup          settings={settings} setSettings={setSettings} onReset={handleReset} syncStatus={syncStatus}/>,
+    command:   <CommandCenter  weeks={weeks} onNavigate={setTab} theme={theme}/>,
+    planner:   <WeeklyPlanner  weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} theme={theme}/>,
+    engine:    <ContentEngine  weeks={weeks} setWeeks={setWeeks} settings={settings} onNavigate={setTab} theme={theme}/>,
+    analytics: <AnalyticsBrain weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} setLastInsight={setLastInsight} theme={theme}/>,
+    setup:     <Setup          settings={settings} setSettings={setSettings} onReset={handleReset} syncStatus={syncStatus} theme={theme}/>,
   };
 
   return (
     <div style={{minHeight:"100vh",background:"#08080E"}}>
-      <div style={{position:"sticky",top:0,zIndex:200,background:"rgba(8,8,14,0.95)",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderBottom:"1px solid #1A1A2A",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
+      <div style={{position:"sticky",top:0,zIndex:200,background:isDark?"rgba(8,8,14,0.95)":"rgba(245,245,247,0.95)",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderBottom:"1px solid "+(isDark?"#1A1A2A":"#e0e0e0"),padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
         <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
-          <div style={{fontWeight:800,fontSize:"16px",letterSpacing:"-0.02em"}}>Rand00mscroll</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"8px",color:"#2a2a3a",background:"#111",border:"1px solid #1A1A2A",padding:"2px 6px",borderRadius:"4px"}}>v2</div>
+          <div style={{fontWeight:800,fontSize:"16px",letterSpacing:"-0.02em",color:isDark?"#E8E8F0":"#111"}}>Rand00mscroll</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"8px",color:isDark?"#2a2a3a":"#aaa",background:isDark?"#111":"#e8e8e8",border:"1px solid "+(isDark?"#1A1A2A":"#ddd"),padding:"2px 6px",borderRadius:"4px"}}>v2</div>
         </div>
         <div style={{flex:1,display:"flex",justifyContent:"center"}}>
           <div style={{position:"relative",width:"100%",maxWidth:"200px"}}>
-            <select value={tab} onChange={e=>setTab(e.target.value)} style={{width:"100%",background:"#111118",border:"1px solid #1A1A2A",borderRadius:"10px",padding:"8px 32px 8px 14px",color:"#E8E8F0",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
+            <select value={tab} onChange={e=>setTab(e.target.value)} style={{width:"100%",background:isDark?"#111118":"#ffffff",border:"1px solid "+(isDark?"#1A1A2A":"#e0e0e0"),borderRadius:"10px",padding:"8px 32px 8px 14px",color:isDark?"#E8E8F0":"#111",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
               {TABS.map(t=><option key={t.id} value={t.id}>{t.label}{t.id==="engine"&&pendingBadge>0?" ("+pendingBadge+")":""}</option>)}
             </select>
             <div style={{position:"absolute",right:"12px",top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"#ADFF2F",fontSize:"11px"}}>▾</div>
           </div>
         </div>
-        <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
-          <div style={{width:6,height:6,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
-          <span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":syncStatus==="syncing"?"#FF6B35":"#ADFF2F"}}>
-            {syncStatus==="syncing"?"SYNC":syncStatus==="synced"?"SYNCED":syncStatus==="saved"?"SAVED":"LIVE"}
-          </span>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+          <button onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
+            style={{background:isDark?"#1A1A2A":"#e8e8e8",border:"none",borderRadius:"20px",padding:"4px 10px",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",gap:"4px",transition:"all .2s"}}>
+            <span>{isDark?"☀️":"🌙"}</span>
+          </button>
+          <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
+            <span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":syncStatus==="syncing"?"#FF6B35":"#ADFF2F"}}>
+              {syncStatus==="syncing"?"SYNC":syncStatus==="synced"?"SYNCED":syncStatus==="saved"?"SAVED":"LIVE"}
+            </span>
+          </div>
         </div>
       </div>
-      <div style={{maxWidth:"860px",margin:"0 auto",padding:"24px 16px 80px"}}>{VIEW[tab]}</div>
+      <div style={{maxWidth:"860px",margin:"0 auto",padding:"24px 16px 80px",color:fg}}>{VIEW[tab]}</div>
     </div>
   );
 }
