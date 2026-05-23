@@ -768,21 +768,24 @@ function Setup({settings, setSettings, onReset, syncStatus}) {
         {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
       </div>
 
-      {/* YouTube Setup */}
+      {/* Buffer Setup */}
       <Card>
-        <SL>YOUTUBE</SL>
+        <SL>BUFFER — YOUTUBE SCHEDULING</SL>
         <div style={{background:"#0A0A12",border:"1px solid #1a2a1a",borderRadius:"10px",padding:"14px",marginBottom:"14px"}}>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO GET YOUR WEB CLIENT ID</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO GET YOUR BUFFER TOKEN</div>
           <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",lineHeight:1.9}}>
-            <div>1. console.cloud.google.com → your project</div>
-            <div>2. APIs &amp; Services → YouTube Data API v3 → Enable</div>
-            <div>3. Credentials → Create → OAuth 2.0 → <strong style={{color:"#ADFF2F"}}>Web Application</strong></div>
-            <div>4. Authorized JS origins: add <span style={{color:"#00CFFF"}}>https://randoomscroll.vercel.app</span></div>
-            <div>5. Copy Client ID → paste below</div>
+            <div>1. buffer.com → log in → profile picture → Settings</div>
+            <div>2. Left menu → Developers</div>
+            <div>3. Copy your Access Token</div>
+            <div>4. Paste it below</div>
           </div>
         </div>
-        {[{key:"youtubeClientId",label:"YouTube Web Client ID",type:"text",hint:"xxxxxxxxxxxx.apps.googleusercontent.com"},{key:"youtubeChannelId",label:"YouTube Channel ID",type:"text",hint:"YouTube Studio → Settings → Channel → Advanced"}].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/></div>)}
-        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"8px",padding:"9px 12px"}}><div style={{fontSize:"10px",color:"#444",fontFamily:"Space Mono"}}>ANTHROPIC API — connected via /api/claude proxy. No key needed here.</div></div>
+        {[
+          {key:"bufferToken",     label:"Buffer Access Token",       type:"password", hint:"Your Buffer access token from Settings → Developers"},
+          {key:"bufferYTProfile", label:"Buffer YouTube Profile ID",  type:"text",     hint:"6a058c6e090476fb991b0ba5 (from your Buffer URL)"},
+          {key:"pexelsKey",       label:"Pexels API Key",            type:"password", hint:"Free at pexels.com/api — for stock footage"},
+        ].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"#888",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"#0A0A12",border:"1px solid #1E1E2E",borderRadius:"8px",padding:"10px 14px",color:"#E8E8F0",fontSize:"13px"}}/></div>)}
+        <div style={{background:"#0A0A12",border:"1px solid #1A1A2A",borderRadius:"8px",padding:"9px 12px"}}><div style={{fontSize:"10px",color:"#444",fontFamily:"Space Mono"}}>No Google account needed. Buffer handles YouTube scheduling directly. No OAuth. No credentials file.</div></div>
       </Card>
 
       {/* Supabase */}
