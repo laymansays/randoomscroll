@@ -10,511 +10,300 @@
 <link rel="manifest" href="/manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
+/* ── CSS Variables ── */
+:root {
+  --bg:#F5F5F7; --bg2:#ffffff; --bg3:#f0f0f0; --bg4:#e8e8e8;
+  --card:#ffffff; --card2:#f8f8f8;
+  --border:#e0e0e0; --border2:#d0d0d0;
+  --text:#111111; --text2:#333333; --text3:#666666; --text4:#999999;
+  --topbar:rgba(245,245,247,0.95);
+  --input-bg:#f5f5f7; --input-border:#e0e0e0;
+  --slot-bg:#f8f8f8;
+}
+body.dark {
+  --bg:#08080E; --bg2:#111118; --bg3:#0A0A12; --bg4:#1A1A2A;
+  --card:#111118; --card2:#0A0A12;
+  --border:#1E1E2E; --border2:#2a2a3a;
+  --text:#E8E8F0; --text2:#CCCCCC; --text3:#888888; --text4:#555555;
+  --topbar:rgba(8,8,14,0.95);
+  --input-bg:#0A0A12; --input-border:#1E1E2E;
+  --slot-bg:#0A0A12;
+}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-tap-highlight-color:transparent}
-
-:root{
-  --bg:#F5F5F7;--bg2:#ffffff;--bg3:#f0f0f0;--bg4:#e8e8e8;
-  --card:#ffffff;--card2:#f8f8f8;
-  --border:#e0e0e0;--border2:#d0d0d0;
-  --text:#111111;--text2:#444444;--text3:#888888;--text4:#aaaaaa;
-  --accent:#ADFF2F;--topbar:rgba(245,245,247,0.95);
-  --input-bg:#f5f5f7;--input-border:#e0e0e0;
-}
-body.dark{
-  --bg:#08080E;--bg2:#111118;--bg3:#0A0A12;--bg4:#1A1A2A;
-  --card:#111118;--card2:#0A0A12;
-  --border:#1E1E2E;--border2:#2a2a3a;
-  --text:#E8E8F0;--text2:#CCCCCC;--text3:#888888;--text4:#555555;
-  --accent:#ADFF2F;--topbar:rgba(8,8,14,0.95);
-  --input-bg:#0A0A12;--input-border:#1E1E2E;
-}
-body{font-family:'Syne',sans-serif;min-height:100vh;background:var(--bg);color:var(--text)}
+body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(173,255,47,.4)}50%{box-shadow:0 0 0 8px rgba(173,255,47,0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .fade-up{animation:fadeUp 0.3s ease forwards}
-input,textarea,select{font-family:'Syne',sans-serif}
-input::placeholder,textarea::placeholder{color:#2a2a3a}
+input,textarea,select{font-family:'Syne',sans-serif;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text)}
+input::placeholder,textarea::placeholder{color:var(--text4)}
 input:focus,textarea:focus,select:focus{outline:none;border-color:#ADFF2F!important}
 textarea{resize:vertical}
 ::-webkit-scrollbar{width:4px;height:4px}
-::-webkit-scrollbar-track{background:#0d0d0d}
-::-webkit-scrollbar-thumb{background:#2a2a3a;border-radius:2px}
+::-webkit-scrollbar-track{background:var(--bg3)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 </style>
 </head>
-<body>
+<body class="light">
 <div id="root"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script type="text/babel">
-const {useState, useEffect, useRef} = React;
+const {useState, useEffect} = React;
 
-// ── Constants ──────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2, 9);
-const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+const DAYS  = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const TIMES = ["7:00 AM","1:00 PM","6:00 PM"];
 const CTYPES = [
-  {id:"cliffhanger", label:"Cliffhanger", color:"#FF6B35"},
-  {id:"ragebait",    label:"Ragebait",    color:"#FF2D6B"},
-  {id:"clickbait",   label:"Clickbait",   color:"#FFD700"},
-  {id:"explanatory", label:"Explanatory", color:"#00CFFF"},
-  {id:"infographic", label:"Infographic", color:"#B06EF3"},
-  {id:"brainrot",    label:"Brainrot",    color:"#ADFF2F"},
-  {id:"engaging",    label:"Engaging",    color:"#00D4AA"},
-  {id:"storytime",   label:"Storytime",   color:"#FF9F43"},
+  {id:"cliffhanger",label:"Cliffhanger",color:"#FF6B35"},
+  {id:"ragebait",   label:"Ragebait",   color:"#FF2D6B"},
+  {id:"clickbait",  label:"Clickbait",  color:"#FFD700"},
+  {id:"explanatory",label:"Explanatory",color:"#00CFFF"},
+  {id:"infographic",label:"Infographic",color:"#B06EF3"},
+  {id:"brainrot",   label:"Brainrot",   color:"#ADFF2F"},
+  {id:"engaging",   label:"Engaging",   color:"#00D4AA"},
+  {id:"storytime",  label:"Storytime",  color:"#FF9F43"},
 ];
-const CTYPE_COLOR = Object.fromEntries(CTYPES.map(c => [c.id, c.color]));
 
 function makeSlots(types, topics) {
-  const t = types.length ? types : ["engaging"];
+  const t  = types.length  ? types  : ["engaging"];
   const tp = topics && topics.length ? topics : ["general"];
-  const s = [];
+  const s  = [];
   let ti = 0;
-  const slotsPerTopic = Math.ceil(21 / tp.length);
-  let slotCount = 0;
+  const spt = Math.ceil(21 / tp.length);
+  let sc = 0;
   for (let d = 0; d < 7; d++)
     for (let x = 0; x < 3; x++) {
-      const topicIndex = Math.floor(slotCount / slotsPerTopic) % tp.length;
-      s.push({
-        id: uid(), day: d, time: x,
-        contentType: t[ti++ % t.length],
-        topic: tp[topicIndex],
-        status: "pending", script: null,
-        videoBlob: null, videoUrl: null,
-        youtubeId: null, scheduleStatus: "unscheduled",
-      });
-      slotCount++;
+      s.push({id:uid(), day:d, time:x, contentType:t[ti++%t.length],
+              topic:tp[Math.floor(sc/spt)%tp.length],
+              status:"pending", script:null, keywords:[], footage:[],
+              youtubeId:null, scheduleStatus:"unscheduled"});
+      sc++;
     }
   return s;
 }
 
-// ALL 4 WEEKS START BLANK
 const INIT_WEEKS = [
-  {id:1, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
-  {id:2, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
-  {id:3, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
-  {id:4, status:"intention", frozen:false, niche:null, topic:null, topics:[], contentTypes:[], score:null, slots:[], evolvedPrompt:""},
+  {id:1,status:"intention",frozen:false,niche:null,topic:null,topics:[],contentTypes:[],score:null,slots:[],evolvedPrompt:""},
+  {id:2,status:"intention",frozen:false,niche:null,topic:null,topics:[],contentTypes:[],score:null,slots:[],evolvedPrompt:""},
+  {id:3,status:"intention",frozen:false,niche:null,topic:null,topics:[],contentTypes:[],score:null,slots:[],evolvedPrompt:""},
+  {id:4,status:"intention",frozen:false,niche:null,topic:null,topics:[],contentTypes:[],score:null,slots:[],evolvedPrompt:""},
 ];
-
 const INIT_SETTINGS = {
-  youtubeClientId:"", youtubeChannelId:"",
-  postingTimes:["07:00","13:00","18:00"],
-  voiceId:"en-US-ChristopherNeural", targetDuration:55,
-  instagramEnabled:false, bufferKey:"", bufferInstagramProfileId:"",
+  bufferToken:"", bufferYTProfile:"6a058c6e090476fb991b0ba5", pexelsKey:"",
+  postingTimes:["07:00","13:00","18:00"], voiceId:"en-US-ChristopherNeural", targetDuration:55,
+  instagramEnabled:false, bufferIGProfile:"",
   supabaseUrl:"", supabaseKey:"", channelKey:"",
 };
-
-const MOCK_ANALYTICS = {
-  weekScore:84, ctr:5.2, duration:67, newSubs:143, estRevenue:34,
+const MOCK_ANALYTICS = {weekScore:84,ctr:5.2,duration:67,newSubs:143,estRevenue:34,
   contentScores:[{type:"Cliffhanger",score:91,ctr:7.1},{type:"Explanatory",score:78,ctr:4.8},{type:"Ragebait",score:64,ctr:3.2}],
-  postingTimes:{"07:00":2400,"13:00":4100,"18:00":6800},
-  topVideo:{title:"5 AI Tools Nobody Talks About", views:4821, ctr:8.1},
-};
+  postingTimes:{"07:00":2400,"13:00":4100,"18:00":6800},topVideo:{title:"5 AI Tools Nobody Talks About",views:4821,ctr:8.1}};
 
-// ── Supabase ───────────────────────────────────────────────────
-async function sbLoad(url, key, ch) {
-  if (!url||!key||!ch) return null;
-  try {
-    const r = await fetch(url+"/rest/v1/r00m_data?channel_key=eq."+encodeURIComponent(ch)+"&select=*",
-      {headers:{apikey:key, Authorization:"Bearer "+key}});
-    const d = await r.json();
-    return Array.isArray(d)&&d[0]?d[0]:null;
-  } catch { return null; }
-}
-async function sbSave(url, key, ch, payload) {
-  if (!url||!key||!ch) return;
-  try {
-    await fetch(url+"/rest/v1/r00m_data", {
-      method:"POST",
-      headers:{apikey:key, Authorization:"Bearer "+key, "Content-Type":"application/json", Prefer:"resolution=merge-duplicates"},
-      body:JSON.stringify({channel_key:ch, weeks:payload.weeks, insight:payload.insight, settings:payload.settings, updated_at:new Date().toISOString()}),
-    });
-  } catch {}
-}
+// ── Supabase ──────────────────────────────────
+async function sbLoad(url,key,ch){if(!url||!key||!ch)return null;try{const r=await fetch(url+"/rest/v1/r00m_data?channel_key=eq."+encodeURIComponent(ch)+"&select=*",{headers:{apikey:key,Authorization:"Bearer "+key}});const d=await r.json();return Array.isArray(d)&&d[0]?d[0]:null;}catch{return null;}}
+async function sbSave(url,key,ch,p){if(!url||!key||!ch)return;try{await fetch(url+"/rest/v1/r00m_data",{method:"POST",headers:{apikey:key,Authorization:"Bearer "+key,"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"},body:JSON.stringify({channel_key:ch,weeks:p.weeks,insight:p.insight,settings:p.settings,updated_at:new Date().toISOString()})});}catch{}}
 
-// ── Claude API ─────────────────────────────────────────────────
-async function claudeCall(messages, opts) {
-  const maxTokens = (opts&&opts.maxTokens)||1000;
-  const body = {model:"claude-sonnet-4-20250514", max_tokens:maxTokens, messages};
-  const r = await fetch("/api/claude", {
-    method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error("Claude "+r.status);
+// ── Claude API ────────────────────────────────
+async function claudeCall(messages,opts){
+  const body={model:"claude-sonnet-4-20250514",max_tokens:(opts&&opts.maxTokens)||1000,messages};
+  const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  if(!r.ok)throw new Error("Claude "+r.status);
   return r.json();
 }
-function getText(d) {
-  return (d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("")||"";
-}
-function tryJSON(t) {
-  try { return JSON.parse(t.replace(/```json|```/g,"").trim()); } catch { return null; }
-}
+const getText=d=>(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("")||"";
+const tryJSON=t=>{try{return JSON.parse(t.replace(/```json|```/g,"").trim());}catch{return null;}};
 
-async function genScripts(slots, evolved) {
-  const d = await claudeCall(
-    [{role:"user", content:"Write "+slots.length+" short-form faceless YouTube Shorts scripts. Match each script exactly to its topic and content type.\n\nScripts:\n"+slots.map((s,i)=>(i+1)+". Topic: \""+s.topic+"\" | Type: "+s.contentType).join("\n")+"\n\n"+(evolved?"Style: "+evolved+"\n\n":"")+"Rules: max 60 words, punchy, strong hook first 8 sec.\n\nReturn ONLY valid JSON array:\n[{\"title\":\"title\",\"type\":\"type\",\"topic\":\"topic\",\"script\":\"script\",\"hook\":\"opening line\",\"ytCaption\":\"caption with 3 hashtags\"}]"}],
-    {maxTokens:2000}
-  );
+async function genScripts(slots,evolved){
+  const d=await claudeCall([{role:"user",content:"Write "+slots.length+" short-form faceless YouTube Shorts scripts. Match each to its topic and content type exactly.\n\nScripts:\n"+slots.map((s,i)=>(i+1)+". Topic: \""+s.topic+"\" | Type: "+s.contentType).join("\n")+"\n\n"+(evolved?"Style: "+evolved+"\n\n":"")+"Rules: max 60 words, punchy, strong hook first 8 sec.\n\nReturn ONLY valid JSON:\n[{\"title\":\"t\",\"type\":\"t\",\"topic\":\"t\",\"script\":\"s\",\"hook\":\"h\",\"ytCaption\":\"c\"}]"}],{maxTokens:2000});
   return tryJSON(getText(d))||[];
 }
-
-async function weeklyInsight(data, niche, prev) {
-  const d = await claudeCall(
-    [{role:"user", content:"Intelligence engine for a faceless YouTube channel.\n\nNiche: "+niche+"\nAnalytics: "+JSON.stringify(data)+"\nPrevious prompt: "+(prev||"none")+"\n\nReturn ONLY valid JSON:\n{\"summary\":\"2-3 sentence analysis\",\"topFormat\":\"best content type\",\"recommendation\":\"specific next week action\",\"evolvedPrompt\":\"improved script instructions\",\"nextNiches\":[\"top\",\"second\",\"third\"],\"adjustments\":[\"a1\",\"a2\",\"a3\",\"a4\"]}"}],
-    {maxTokens:900}
-  );
+async function weeklyInsight(data,niche,prev){
+  const d=await claudeCall([{role:"user",content:"Intelligence engine for faceless YouTube.\n\nNiche: "+niche+"\nAnalytics: "+JSON.stringify(data)+"\nPrev: "+(prev||"none")+"\n\nReturn ONLY valid JSON:\n{\"summary\":\"s\",\"topFormat\":\"f\",\"recommendation\":\"r\",\"evolvedPrompt\":\"p\",\"nextNiches\":[\"a\",\"b\",\"c\"],\"adjustments\":[\"a\",\"b\",\"c\",\"d\"]}"}],{maxTokens:900});
   return tryJSON(getText(d))||{};
 }
 
-// ── Video Generation (Canvas + MediaRecorder) ──────────────────
-function generateVideoBlob(slot) {
-  return new Promise((resolve, reject) => {
-    if (!window.MediaRecorder) { reject(new Error("MediaRecorder not supported — use Chrome")); return; }
+// ── Shared UI ─────────────────────────────────
+function Tag({children,color="#ADFF2F"}){return <span style={{fontFamily:"Space Mono",fontSize:"10px",color,background:color+"18",border:"1px solid "+color+"44",padding:"3px 9px",borderRadius:"20px",letterSpacing:"0.05em"}}>{children}</span>;}
+function Spinner({size=14}){return <span style={{display:"inline-block",width:size,height:size,border:"2px solid #ADFF2F",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite",flexShrink:0}}/>;}
+function SL({children,color}){return <div style={{fontFamily:"Space Mono",fontSize:"10px",color:color||"var(--text4)",letterSpacing:"0.1em",marginBottom:"12px"}}>{children}</div>;}
+function Card({children,style,accent}){return <div style={{background:"var(--card)",border:"1px solid "+(accent||"var(--border)"),borderRadius:"12px",padding:"18px",...(style||{})}}>{children}</div>;}
+function StatBox({label,value,sub,accent="#ADFF2F"}){return <div style={{flex:1,minWidth:"90px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:accent,lineHeight:1}}>{value}</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"5px"}}>{label}</div>{sub&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginTop:"2px"}}>{sub}</div>}</div>;}
 
-    const W = 720, H = 1280;
-    const canvas = document.createElement("canvas");
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    const accent = CTYPE_COLOR[slot.contentType] || "#ADFF2F";
-    const hook = (slot.script && slot.script.hook) || "";
-    const scriptText = (slot.script && slot.script.script) || "";
-    const title = (slot.script && slot.script.title) || "";
-    const allWords = scriptText.split(/\s+/).filter(w => w.length > 0);
-
-    const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp8")
-      ? "video/webm;codecs=vp8" : "video/webm";
-    const stream = canvas.captureStream(24);
-    const recorder = new MediaRecorder(stream, {mimeType, videoBitsPerSecond:1800000});
-    const chunks = [];
-
-    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-    recorder.onstop = () => resolve(new Blob(chunks, {type:"video/webm"}));
-    recorder.onerror = e => reject(e.error||new Error("Recording failed"));
-
-    let frameId = null;
-    let phase = "hook";
-    let wordIndex = 0;
-    let phaseStart = Date.now();
-    let lastWordTime = Date.now();
-    const MS_PER_WORD = 400;
-    const HOOK_DURATION = 2800;
-
-    function wrapText(text, maxW, font) {
-      ctx.font = font;
-      const words = text.split(" ");
-      const lines = [];
-      let cur = "";
-      for (const w of words) {
-        const test = cur ? cur+" "+w : w;
-        if (ctx.measureText(test).width > maxW && cur) { lines.push(cur); cur = w; }
-        else cur = test;
-      }
-      if (cur) lines.push(cur);
-      return lines;
-    }
-
-    function drawBg() {
-      ctx.fillStyle = "#08080E";
-      ctx.fillRect(0,0,W,H);
-      ctx.fillStyle = accent;
-      ctx.fillRect(0,0,W,6);
-      ctx.fillRect(0,H-6,W,6);
-    }
-
-    function drawHook() {
-      drawBg();
-      const elapsed = Date.now() - phaseStart;
-      const prog = Math.min(elapsed / HOOK_DURATION, 1);
-      const alpha = prog < 0.12 ? prog/0.12 : prog > 0.88 ? (1-prog)/0.12 : 1;
-      ctx.save(); ctx.globalAlpha = alpha;
-
-      ctx.font = "bold 32px 'Space Mono', monospace";
-      ctx.fillStyle = accent; ctx.textAlign = "center";
-      ctx.fillText("HOOK", W/2, H/2 - 160);
-
-      const lines = wrapText(hook, W-80, "bold 60px 'Syne', sans-serif");
-      ctx.fillStyle = "#FFFFFF"; ctx.textAlign = "center";
-      const lh = 78;
-      let y = H/2 - (lines.length*lh)/2 + 20;
-      lines.forEach(l => { ctx.font = "bold 60px 'Syne', sans-serif"; ctx.fillText(l,W/2,y); y+=lh; });
-
-      ctx.restore();
-    }
-
-    function drawScript() {
-      drawBg();
-      const shown = allWords.slice(0, wordIndex+1);
-      const recent = shown.slice(-10);
-      const display = recent.join(" ");
-      const progress = (wordIndex+1)/allWords.length;
-
-      // Progress bar
-      ctx.fillStyle = "#1A1A2A";
-      ctx.beginPath(); ctx.roundRect(50,100,W-100,8,4); ctx.fill();
-      ctx.fillStyle = accent;
-      ctx.beginPath(); ctx.roundRect(50,100,(W-100)*progress,8,4); ctx.fill();
-
-      // Type badge
-      ctx.font = "bold 28px 'Space Mono', monospace";
-      ctx.fillStyle = accent; ctx.textAlign = "center";
-      ctx.fillText(slot.contentType.toUpperCase(), W/2, 170);
-
-      // Main words
-      const fontSize = allWords.length > 40 ? 54 : 64;
-      const font = `bold ${fontSize}px 'Syne', sans-serif`;
-      const lines = wrapText(display, W-80, font);
-      const lh = fontSize*1.35;
-      let y = H/2 - (lines.length*lh)/2;
-      lines.forEach((l,i) => {
-        ctx.font = font; ctx.textAlign = "center";
-        ctx.fillStyle = i===lines.length-1 ? accent : "rgba(255,255,255,0.65)";
-        ctx.fillText(l, W/2, y); y+=lh;
-      });
-
-      // Title footer
-      ctx.font = "bold 26px 'Syne', sans-serif";
-      ctx.fillStyle = "rgba(255,255,255,0.25)";
-      ctx.textAlign = "center";
-      ctx.fillText(title.slice(0,42)+(title.length>42?"...":""), W/2, H-50);
-    }
-
-    function frame() {
-      const now = Date.now();
-      if (phase === "hook") {
-        drawHook();
-        if (now - phaseStart >= HOOK_DURATION) { phase="script"; lastWordTime=now; }
-      } else {
-        drawScript();
-        if (now - lastWordTime >= MS_PER_WORD) {
-          wordIndex++;
-          lastWordTime = now;
-          if (wordIndex >= allWords.length) {
-            setTimeout(() => { recorder.stop(); cancelAnimationFrame(frameId); }, 1200);
-            return;
-          }
-        }
-      }
-      frameId = requestAnimationFrame(frame);
-    }
-
-    recorder.start(100);
-    frame();
-  });
+function Btn({children,onClick,disabled,variant="primary",small,full}){
+  const styles={
+    primary:{background:disabled?"var(--bg4)":"#ADFF2F",color:disabled?"var(--text4)":"#08080E",border:"none"},
+    outline: {background:"transparent",color:"#ADFF2F",border:"1px solid rgba(173,255,47,0.4)"},
+    danger:  {background:"transparent",color:"#FF2D6B",border:"1px solid rgba(255,45,107,0.3)"},
+    ghost:   {background:"var(--card)",color:"var(--text3)",border:"1px solid var(--border)"},
+    green:   {background:"rgba(13,26,13,0.8)",color:"#ADFF2F",border:"1px solid rgba(173,255,47,0.3)"},
+  }[variant]||{};
+  return <button onClick={onClick} disabled={disabled} style={{...styles,fontFamily:"Syne",fontWeight:700,fontSize:small?"12px":"14px",padding:small?"7px 14px":"11px 22px",borderRadius:"8px",cursor:disabled?"not-allowed":"pointer",transition:"all .15s",width:full?"100%":undefined,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>{children}</button>;
 }
 
-// ── YouTube Upload ─────────────────────────────────────────────
-async function uploadToYouTube(blob, slot, accessToken, publishAt) {
-  const title  = (slot.script && slot.script.title) || "Untitled";
-  const desc   = (slot.script && slot.script.ytCaption || "#Shorts") + "\n\n#Shorts";
-  const meta   = {
-    snippet:{ title, description:desc, tags:["shorts","#shorts"], categoryId:"22" },
-    status:{ privacyStatus:"private", publishAt, selfDeclaredMadeForKids:false },
+function ZoneCard({week,niche,status,score,selected,onClick,frozen}){
+  const done=frozen&&status!=="live";
+  const cfgMap={
+    live:     {label:"LIVE", bg:"rgba(10,26,10,0.8)",  border:"#ADFF2F", dot:"#ADFF2F", pulse:true},
+    draft:    {label:"DRAFT",bg:"rgba(26,18,0,0.8)",   border:"#FF6B35", dot:"#FF6B35", pulse:false},
+    intention:{label:"OPEN", bg:"var(--card)",          border:"var(--border)",dot:"var(--border2)",pulse:false},
+    done:     {label:"DONE", bg:"var(--bg3)",           border:"var(--border)",dot:"var(--border)", pulse:false},
   };
-
-  // Resumable upload — handles any file size
-  const initR = await fetch(
-    "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
-    {
-      method:"POST",
-      headers:{
-        Authorization:"Bearer "+accessToken,
-        "Content-Type":"application/json",
-        "X-Upload-Content-Type":"video/webm",
-        "X-Upload-Content-Length":String(blob.size),
-      },
-      body:JSON.stringify(meta),
-    }
-  );
-  if (!initR.ok) {
-    const err = await initR.json();
-    throw new Error("YouTube init failed: "+(err.error&&err.error.message||initR.status));
-  }
-  const uploadUrl = initR.headers.get("Location");
-  if (!uploadUrl) throw new Error("No upload URL from YouTube");
-
-  const uploadR = await fetch(uploadUrl, {
-    method:"PUT",
-    headers:{"Content-Type":"video/webm", "Content-Length":String(blob.size)},
-    body:blob,
-  });
-  if (!uploadR.ok) throw new Error("YouTube upload failed: "+uploadR.status);
-  const data = await uploadR.json();
-  return data.id;
+  const cfg=cfgMap[done?"done":status]||cfgMap.intention;
+  return <div onClick={!done&&status!=="live"?onClick:undefined} style={{background:cfg.bg,border:"1px solid "+(selected?"#ADFF2F":cfg.border),borderRadius:"12px",padding:"12px",minHeight:"84px",cursor:done||status==="live"?"default":"pointer",opacity:done?0.5:1,transition:"all .2s",outline:selected?"2px solid rgba(173,255,47,0.15)":"none"}}>
+    <div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}>
+      <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>WK {week}</span>
+      <div style={{display:"flex",alignItems:"center",gap:"4px"}}>
+        <div style={{width:6,height:6,borderRadius:"50%",background:cfg.dot,...(cfg.pulse?{animation:"pulse 2s infinite"}:{})}}/>
+        <span style={{fontFamily:"Space Mono",fontSize:"9px",color:cfg.dot}}>{cfg.label}</span>
+      </div>
+    </div>
+    <div style={{fontWeight:700,fontSize:"13px",color:done?"var(--text4)":"var(--text)",marginBottom:"5px",lineHeight:1.3}}>{niche||"Plan this week"}</div>
+    {score!=null&&<div style={{fontFamily:"Space Mono",fontSize:"14px",color:"#ADFF2F"}}>{score}<span style={{fontSize:"10px",color:"var(--text4)"}}/100</span></div>}
+    {status==="intention"&&!done&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginTop:"3px"}}>tap to plan</div>}
+  </div>;
 }
 
-function buildPublishTime(day, timeStr, offsetDays) {
-  const DAY = {Mon:0,Tue:1,Wed:2,Thu:3,Fri:4,Sat:5,Sun:6};
-  const HRS  = {"7:00 AM":"07:00","1:00 PM":"13:00","6:00 PM":"18:00"};
-  const now  = new Date();
-  const target = new Date(now);
-  const diff = (DAY[day]||0) - now.getDay();
-  target.setDate(now.getDate() + ((diff+7)%7) + (offsetDays||7));
-  const [h,m] = (HRS[timeStr]||"07:00").split(":").map(Number);
-  target.setHours(h,m,0,0);
-  return target.toISOString();
-}
-
-// ── Shared UI ──────────────────────────────────────────────────
-function Tag(p){const c=p.color||"#ADFF2F";return <span style={{fontFamily:"Space Mono",fontSize:"10px",color:c,background:c+"18",border:"1px solid "+c+"44",padding:"3px 9px",borderRadius:"20px",letterSpacing:"0.05em"}}>{p.children}</span>;}
-function Spinner(p){const s=p.size||14;return <span style={{display:"inline-block",width:s,height:s,border:"2px solid #ADFF2F",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite",flexShrink:0}}/>;}
-function SL(p){return <div style={{fontFamily:"Space Mono",fontSize:"10px",color:p.color||"#555",letterSpacing:"0.1em",marginBottom:"12px"}}>{p.children}</div>;}
-function Card(p){return <div style={{background:"var(--card)",border:"1px solid "+(p.accent||"var(--border)"),borderRadius:"12px",padding:"18px",...(p.style||{})}}>{p.children}</div>;}
-function StatBox(p){const a=p.accent||"#ADFF2F";return <div style={{flex:1,minWidth:"90px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:a,lineHeight:1}}>{p.value}</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"5px"}}>{p.label}</div>{p.sub&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text2)",marginTop:"2px"}}>{p.sub}</div>}</div>;}
-function Btn(p){const v=p.variant||"primary";const look={primary:{background:p.disabled?p.disabled?"#1c1c28":"#ADFF2F",color:p.disabled?"#444":"#08080E",border:"none"},outline:{background:"transparent",color:"#ADFF2F",border:"1px solid #ADFF2F55"},danger:{background:"transparent",color:"#FF2D6B",border:"1px solid #FF2D6B44"},ghost:{background:"var(--card)",color:"var(--text3)",border:"1px solid var(--border)"},green:{background:"#0D1A0D",color:"#ADFF2F",border:"1px solid #ADFF2F44"},orange:{background:"#1A0A00",color:"#FF6B35",border:"1px solid #FF6B3544"}}[v]||{};return <button onClick={p.onClick} disabled={p.disabled} style={{...look,fontFamily:"Syne",fontWeight:700,fontSize:p.small?"12px":"14px",padding:p.small?"7px 14px":"11px 22px",borderRadius:"8px",cursor:p.disabled?"not-allowed":"pointer",transition:"all .15s",width:p.full?"100%":undefined,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>{p.children}</button>;}
-function ZoneCard(p){const done=p.frozen&&p.status!=="live";const cfg={live:{label:"LIVE",bg:"#0A1A0A",border:"#ADFF2F",dot:"#ADFF2F",pulse:true},draft:{label:"DRAFT",bg:"#1A1200",border:"#FF6B35",dot:"#FF6B35",pulse:false},intention:{label:"OPEN",bg:"var(--card)",border:"var(--border)",dot:"#333",pulse:false},done:{label:"DONE",bg:"#0d0d0d",border:"#1a1a1a",dot:"#222",pulse:false}}[done?"done":p.status]||{};return <div onClick={!done&&p.status!=="live"?p.onClick:undefined} style={{background:cfg.bg,border:"1px solid "+(p.selected?"#ADFF2F":cfg.border),borderRadius:"12px",padding:"12px",minHeight:"84px",cursor:done||p.status==="live"?"default":"pointer",opacity:done?0.4:1,transition:"all .2s",outline:p.selected?"2px solid #ADFF2F22":"none"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:"6px"}}><span style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text2)"}}>WK {p.week}</span><div style={{display:"flex",alignItems:"center",gap:"4px"}}><div style={{width:6,height:6,borderRadius:"50%",background:cfg.dot,...(cfg.pulse?{animation:"pulse 2s infinite"}:{})}}/>  <span style={{fontFamily:"Space Mono",fontSize:"9px",color:cfg.dot}}>{cfg.label}</span></div></div><div style={{fontWeight:700,fontSize:"13px",color:done?"#333":"#E8E8F0",marginBottom:"5px",lineHeight:1.3}}>{p.niche||"Plan this week"}</div>{p.score!=null&&<div style={{fontFamily:"Space Mono",fontSize:"14px",color:"#ADFF2F"}}>{p.score}<span style={{fontSize:"10px",color:"var(--text4)"}}>/100</span></div>}{p.status==="intention"&&!done&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text3)",marginTop:"3px"}}>tap to plan</div>}</div>;}
-
-// ── Command Center ─────────────────────────────────────────────
-function CommandCenter({weeks, onNavigate}) {
-  const live  = weeks.find(w=>w.status==="live");
-  const draft = weeks.find(w=>w.status==="draft"&&w.slots&&w.slots.length>0);
-  const open  = weeks.find(w=>w.status==="intention");
-  const pending   = draft?draft.slots.filter(s=>s.status==="pending").length:0;
-  const videoDone = draft?draft.slots.filter(s=>s.scheduleStatus==="youtube_done").length:0;
-  const nextAction = !live&&!draft?{msg:"Start: Planner → pick niche + topics → lock Week 1",tab:"planner"}:!draft?{msg:"Planner → lock Week "+(open?open.id:2),tab:"planner"}:pending>0?{msg:"Content Engine → generate "+pending+" scripts",tab:"engine"}:videoDone<21?{msg:"Content Engine → generate videos → upload to YouTube",tab:"engine"}:{msg:"All done. Check back Sunday for analytics.",tab:null};
+// ── Command Center ────────────────────────────
+function CommandCenter({weeks,onNavigate}){
+  const live=weeks.find(w=>w.status==="live");
+  const draft=weeks.find(w=>w.status==="draft"&&w.slots&&w.slots.length>0);
+  const open=weeks.find(w=>w.status==="intention");
+  const pending=draft?draft.slots.filter(s=>s.status==="pending").length:0;
+  const scheduled=draft?draft.slots.filter(s=>s.scheduleStatus==="youtube_done").length:0;
+  const nextAction=!live&&!draft?{msg:"Start: Planner → niche → topics → lock Week 1",tab:"planner"}
+    :!draft?{msg:"Planner → lock Week "+(open?open.id:2),tab:"planner"}
+    :pending>0?{msg:"Content Engine → generate "+pending+" scripts",tab:"engine"}
+    :scheduled<21?{msg:"Content Engine → export jobs → run pipeline",tab:"engine"}
+    :{msg:"All done. Check back Sunday for analytics.",tab:null};
   const steps=[
     {s:live?"done":"pending",t:"Wk1",text:live?"Week "+live.id+" live — "+live.niche:"Lock Week 1 in Planner"},
-    {s:draft?"done":live?"active":"pending",t:"Next",text:draft?"Week "+draft.id+" drafted":"Lock next week"},
+    {s:draft?"done":live?"active":"pending",t:"Next",text:draft?"Week "+draft.id+" drafted — "+draft.niche:"Lock next week"},
     {s:pending===0&&draft?"done":"pending",t:"Scripts",text:"Scripts: "+(draft?(21-pending)+"/21":"0/21")},
-    {s:videoDone>0?"done":"pending",t:"Videos",text:"Videos generated & on YouTube: "+videoDone+"/21"},
+    {s:scheduled>0?"done":"pending",t:"YouTube",text:"On YouTube via Buffer: "+scheduled+"/21"},
     {s:"pending",t:"Sunday",text:"Analytics → engine evolves → next niche"},
   ];
-  return (
-    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div>
-        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-          <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
-          <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",letterSpacing:"0.08em"}}>ENGINE READY</span>
-        </div>
-        <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Command Center</h2>
-        <p style={{color:"var(--text4)",fontSize:"13px",marginTop:"3px"}}>{live?"Week "+live.id+" live — "+live.niche:draft?"Week "+draft.id+" drafting":"No weeks planned — start in Planner"}</p>
+  return <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
+        <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
+        <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",letterSpacing:"0.08em"}}>ENGINE READY</span>
       </div>
-      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-        <StatBox label="Scripts" value={(21-pending)+"/21"} sub="generated" accent="#FF6B35"/>
-        <StatBox label="Videos on YT" value={videoDone+"/21"} sub="uploaded" accent="#ADFF2F"/>
-        <StatBox label="Weeks Open" value={weeks.filter(w=>w.status==="intention").length} sub="to plan" accent="#B06EF3"/>
-        <StatBox label="Live Score" value={live?(live.score||"—"):"—"} sub="this week" accent="#00CFFF"/>
-      </div>
-      <div>
-        <SL>ROLLING RUNWAY</SL>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>
-          {weeks.map(w=><ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen} onClick={()=>onNavigate(w.status==="intention"?"planner":"engine")}/>)}
-        </div>
-      </div>
-      {!live&&!draft&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"12px",padding:"16px"}}><SL color="#ADFF2F">HOW TO START</SL>{["1. Planner → enter niche → search topics → lock Week 1","2. Content Engine → generate all 21 scripts","3. Content Engine → generate videos (browser does it)","4. Upload all to YouTube with one tap"].map((s,i)=><div key={i} style={{fontSize:"13px",color:"var(--text3)",marginBottom:"4px"}}>{s}</div>)}</div>}
-      <Card>
-        <SL>PIPELINE STATUS</SL>
-        {steps.map((step,i)=>{const dc=step.s==="done"?"#ADFF2F":step.s==="active"?"#FF6B35":"#2a2a3a";return <div key={i} style={{display:"flex",gap:"12px",alignItems:"flex-start",marginBottom:"10px"}}><div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,marginTop:"2px",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+dc,background:dc+"18",fontSize:"9px",color:dc,...(step.s==="active"?{animation:"pulse 2s infinite"}:{})}}>{step.s==="done"?"✓":step.s==="active"?"◉":"○"}</div><div style={{flex:1,fontSize:"13px",color:step.s==="pending"?"#444":"#CCC"}}>{step.text}</div><span style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text3)",flexShrink:0}}>{step.t}</span></div>;})}
-      </Card>
-      <div style={{background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"12px",padding:"14px 16px"}}>
-        <SL color="#ADFF2F">NEXT ACTION</SL>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px",flexWrap:"wrap"}}>
-          <p style={{fontSize:"14px",color:"var(--text2)",flex:1}}>{nextAction.msg}</p>
-          {nextAction.tab&&<Btn small variant="green" onClick={()=>onNavigate(nextAction.tab)}>Go</Btn>}
-        </div>
-      </div>
+      <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Command Center</h2>
+      <p style={{color:"var(--text3)",fontSize:"13px",marginTop:"3px"}}>{live?"Week "+live.id+" live — "+live.niche:draft?"Week "+draft.id+" drafting — "+draft.niche:"No weeks planned — start in Planner"}</p>
     </div>
-  );
-}
-
-// ── Weekly Planner ─────────────────────────────────────────────
-function WeeklyPlanner({weeks, setWeeks, lastInsight}) {
-  const firstOpen = weeks.find(x=>x.status==="intention");
-  const [selWeek, setSelWeek] = useState(firstOpen?firstOpen.id:1);
-  const [niche,   setNiche]   = useState("");
-  const [trending,setTrending]= useState([]);
-  const [loading, setLoading] = useState(false);
-  const [trendErr,setTrendErr]= useState("");
-  const [topics,  setTopics]  = useState(["","",""]);
-  const [selTypes,setSelTypes]= useState(["cliffhanger","explanatory"]);
-  const [usedRec, setUsedRec] = useState(false);
-  const week = weeks.find(w=>w.id===selWeek);
-  const hasRecs = lastInsight&&lastInsight.nextNiches&&lastInsight.nextNiches.length>0;
-  const validTopics = topics.filter(t=>t.trim().length>0);
-  const canLock = validTopics.length>0&&selTypes.length>0&&niche.trim().length>0;
-  const slotsPerTopic = validTopics.length>0?Math.ceil(21/validTopics.length):7;
-
-  const doSearch = async()=>{
-    if(!niche.trim()){setTrendErr("Enter a niche first");return;}
-    setTrendErr("");setLoading(true);setTrending([]);
-    try{
-      const d=await claudeCall([{role:"user",content:"Generate 8 specific trending YouTube Shorts topic ideas for the \""+niche.trim()+"\" niche. Make each topic specific, clickable, and with high viral potential. Assign a heat score 70-99. Return ONLY valid JSON:\n[{\"topic\":\"specific topic\",\"heat\":95,\"source\":\"YouTube\"},...]"}],{maxTokens:900});
-      const t=tryJSON(getText(d))||[];
-      if(t.length){setTrending(t);}else{setTrendErr("Try a more specific niche like 'AI Tools' or 'Personal Finance'");}
-    }catch{setTrendErr("Search failed — check connection");}
-    setLoading(false);
-  };
-
-  const setTopic=(idx,val)=>{const u=[...topics];u[idx]=val;setTopics(u);};
-  const pickTrending=(topicText)=>{const empty=topics.findIndex(t=>t.trim()==="");const target=empty>=0?empty:2;const u=[...topics];u[target]=topicText;setTopics(u);};
-  const toggleType=id=>setSelTypes(p=>p.includes(id)?p.filter(t=>t!==id):[...p,id]);
-
-  const lockWeek=()=>{
-    if(!canLock)return;
-    const filled=validTopics;
-    const isFirst=weeks.filter(x=>x.status==="live").length===0;
-    setWeeks(prev=>prev.map(w=>w.id===selWeek?{...w,status:isFirst?"live":"draft",frozen:isFirst,niche:niche.trim(),topic:filled[0],topics:filled,contentTypes:selTypes,slots:makeSlots(selTypes,filled)}:w));
-    setTopics(["","",""]);setNiche("");setTrending([]);setUsedRec(false);
-  };
-
-  return (
-    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Weekly Planner</h2><p style={{color:"var(--text4)",fontSize:"13px",marginTop:"3px"}}>One niche · Multiple topics · 21 videos · Rolling runway</p></div>
+    <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+      <StatBox label="Scripts"    value={(21-pending)+"/21"} sub="generated"  accent="#FF6B35"/>
+      <StatBox label="On YouTube" value={scheduled+"/21"}    sub="via Buffer" accent="#ADFF2F"/>
+      <StatBox label="Weeks Open" value={weeks.filter(w=>w.status==="intention").length} sub="to plan" accent="#B06EF3"/>
+      <StatBox label="Live Score" value={live?(live.score||"—"):"—"} sub="this week" accent="#00CFFF"/>
+    </div>
+    <div>
+      <SL>ROLLING RUNWAY</SL>
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>
-        {weeks.map(w=><ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen} selected={selWeek===w.id} onClick={()=>setSelWeek(w.id)}/>)}
+        {weeks.map(w=><ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen} onClick={()=>onNavigate(w.status==="intention"?"planner":"engine")}/>)}
       </div>
-      {week&&(week.status==="live"||week.status==="draft")&&!week.frozen&&<Card accent="#FF6B3544"><SL color="#FF6B35">WEEK {selWeek} LOCKED</SL><p style={{fontSize:"13px",color:"var(--text3)",marginBottom:"10px"}}>Go to <strong style={{color:"#ADFF2F"}}>Content Engine</strong> to generate scripts and videos.</p><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}><Tag color="#FF6B35">{week.niche}</Tag>{(week.topics||[]).map((t,i)=><Tag key={i} color="#00CFFF">{t.slice(0,28)}</Tag>)}</div></Card>}
-      {week&&week.frozen&&<Card accent="#ADFF2F33"><SL color="#ADFF2F">WEEK {selWeek} — LIVE</SL><p style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.75}}>Publishing automatically 3x/day.</p></Card>}
-      {week&&week.status==="intention"&&<Card style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-        <div style={{fontWeight:700,fontSize:"16px"}}>Planning Week {selWeek}{weeks.filter(x=>x.status==="live").length===0?" — This becomes your live Week 1":""}</div>
-        {hasRecs&&<div style={{background:"#070712",border:"1px solid #00CFFF22",borderRadius:"12px",padding:"14px"}}><div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}><div style={{width:22,height:22,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#00CFFF"}}>◈</div><SL color="#00CFFF">ENGINE RECOMMENDS</SL></div><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{lastInsight.nextNiches.map((n,i)=><button key={i} onClick={()=>{setNiche(n);setUsedRec(true);}} style={{background:usedRec&&niche===n?"#0D1A0D":"#0A0A12",border:"1px solid "+(usedRec&&niche===n?"#ADFF2F":i===0?"#FF6B3566":"#1A1A2A"),color:i===0?"#FF6B35":"#888",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:i===0?700:400,fontSize:"13px",cursor:"pointer"}}>{i===0&&"★ "}{n}</button>)}</div></div>}
-        {!hasRecs&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px"}}><p style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text2)",lineHeight:1.7}}>Engine recommendations appear after your first analytics run.</p></div>}
-        <div><SL>STEP 1 — NICHE</SL><input value={niche} onChange={e=>{setNiche(e.target.value);setUsedRec(false);}} placeholder="e.g. AI Tools, Personal Finance, True Crime..." style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px 14px",color:"var(--text)",fontSize:"13px"}}/></div>
-        <div>
-          <SL>STEP 2 — TOPICS (up to 3, ~{slotsPerTopic} videos each)</SL>
-          {[0,1,2].map(idx=><div key={idx} style={{marginBottom:"8px"}}><div style={{fontSize:"11px",color:"var(--text4)",fontFamily:"Space Mono",marginBottom:"3px"}}>TOPIC {idx+1} {idx===0?"(required)":"(optional)"}</div><input value={topics[idx]} onChange={e=>setTopic(idx,e.target.value)} placeholder={idx===0?"Main topic...":idx===1?"Second angle (optional)...":"Third angle (optional)..."} style={{width:"100%",background:topics[idx]?"#0D1A0D":"var(--bg3)",border:"1px solid "+(topics[idx]?"#ADFF2F44":"var(--border)"),borderRadius:"8px",padding:"10px 14px",color:"var(--text)",fontSize:"13px",transition:"all .2s"}}/></div>)}
-          <div style={{marginTop:"10px"}}><Btn variant="outline" small onClick={doSearch}>{loading?<><Spinner size={12}/>Searching...</>:"Search Trending Topics"}</Btn></div>
-          {trendErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"8px"}}>{trendErr}</div>}
-          {trending.length>0&&<div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"4px"}}>{trending.map((t,i)=>{const added=topics.some(tp=>tp===t.topic);return <div key={i} onClick={()=>!added&&pickTrending(t.topic)} style={{display:"flex",alignItems:"center",gap:"10px",padding:"8px 12px",borderRadius:"8px",cursor:added?"default":"pointer",background:added?"#0D1A0D":"var(--bg3)",border:"1px solid "+(added?"#ADFF2F44":"var(--border)"),opacity:added?0.7:1}}><div style={{fontFamily:"Space Mono",fontSize:"12px",fontWeight:700,width:26,flexShrink:0,color:t.heat>92?"#FF2D6B":t.heat>87?"#FF6B35":"#ADFF2F"}}>{t.heat}</div><div style={{flex:1,fontSize:"13px"}}>{t.topic}</div><div style={{fontFamily:"Space Mono",fontSize:"9px",color:added?"#ADFF2F":"#444"}}>{added?"✓":t.source}</div></div>;})}</div>}
-        </div>
-        <div>
-          <SL>STEP 3 — CONTENT TYPE MIX</SL>
-          <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"8px"}}>{CTYPES.map(ct=><button key={ct.id} onClick={()=>toggleType(ct.id)} style={{background:selTypes.includes(ct.id)?ct.color+"22":"var(--bg3)",border:"1px solid "+(selTypes.includes(ct.id)?ct.color:"var(--border)"),color:selTypes.includes(ct.id)?ct.color:"var(--text4)",padding:"6px 12px",borderRadius:"20px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",transition:"all .15s"}}>{ct.label}</button>)}</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text2)"}}>21 videos · {selTypes.length} format{selTypes.length!==1?"s":""} · {validTopics.length||1} topic{validTopics.length!==1?"s":""}</div>
-        </div>
-        {canLock&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>WEEK {selWeek} SUMMARY</div><div style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.8}}><div>Niche: <strong style={{color:"var(--text)"}}>{niche}</strong></div>{validTopics.map((t,i)=><div key={i}>Topic {i+1}: <strong style={{color:"var(--text)"}}>{t}</strong> — {slotsPerTopic} videos</div>)}<div>Formats: <strong style={{color:"var(--text)"}}>{selTypes.join(", ")}</strong></div></div></div>}
-        <Btn onClick={lockWeek} disabled={!canLock}>Lock Week {selWeek} and Start</Btn>
-      </Card>}
     </div>
-  );
+    {!live&&!draft&&<div style={{background:"rgba(13,26,13,0.4)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:"12px",padding:"16px"}}>
+      <SL color="#ADFF2F">HOW TO START</SL>
+      {["1. Planner → enter niche → search topics → lock Week 1","2. Content Engine → generate all 21 scripts","3. Export jobs → run pipeline (Claude Code on Windows)","4. Import manifest → all 21 scheduled on YouTube"].map((s,i)=><div key={i} style={{fontSize:"13px",color:"var(--text3)",marginBottom:"4px"}}>{s}</div>)}
+    </div>}
+    <Card>
+      <SL>PIPELINE STATUS</SL>
+      {steps.map((step,i)=>{
+        const dc=step.s==="done"?"#ADFF2F":step.s==="active"?"#FF6B35":"var(--border2)";
+        return <div key={i} style={{display:"flex",gap:"12px",alignItems:"flex-start",marginBottom:"10px"}}>
+          <div style={{width:18,height:18,borderRadius:"50%",flexShrink:0,marginTop:"2px",display:"flex",alignItems:"center",justifyContent:"center",border:"1px solid "+dc,background:dc+(dc.startsWith("var")?"":"18"),fontSize:"9px",color:dc,...(step.s==="active"?{animation:"pulse 2s infinite"}:{})}}>{step.s==="done"?"✓":step.s==="active"?"◉":"○"}</div>
+          <div style={{flex:1,fontSize:"13px",color:step.s==="pending"?"var(--text4)":"var(--text2)"}}>{step.text}</div>
+          <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",flexShrink:0}}>{step.t}</span>
+        </div>;
+      })}
+    </Card>
+    <div style={{background:"rgba(13,26,13,0.4)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:"12px",padding:"14px 16px"}}>
+      <SL color="#ADFF2F">YOUR NEXT ACTION</SL>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px",flexWrap:"wrap"}}>
+        <p style={{fontSize:"14px",color:"var(--text2)",flex:1}}>{nextAction.msg}</p>
+        {nextAction.tab&&<Btn small variant="green" onClick={()=>onNavigate(nextAction.tab)}>Go</Btn>}
+      </div>
+    </div>
+  </div>;
 }
 
-// ── Content Engine ─────────────────────────────────────────────
-function ContentEngine({weeks, setWeeks, settings, onNavigate, theme}) {
-  const workable = weeks.filter(w=>w.slots&&w.slots.length>0&&(w.status==="draft"||w.status==="live"));
-  const lastW = workable[workable.length-1];
-  const [activeId,   setActiveId]   = useState(lastW?lastW.id:null);
-  const [generating, setGenerating] = useState(false);
-  const [genProgress,setGenProgress]= useState(0);
-  const [genTotal,   setGenTotal]   = useState(0);
-  const [expanded,   setExpanded]   = useState(null);
-  const [showImport, setShowImport] = useState(false);
-  const [manifest,   setManifest]   = useState("");
-  const [importErr,  setImportErr]  = useState("");
-  const [importOk,   setImportOk]   = useState(false);
-  const [exported,   setExported]   = useState(false);
+// ── Weekly Planner ────────────────────────────
+function WeeklyPlanner({weeks,setWeeks,lastInsight}){
+  const firstOpen=weeks.find(x=>x.status==="intention");
+  const [selWeek,setSelWeek]=useState(firstOpen?firstOpen.id:1);
+  const [niche,setNiche]=useState("");
+  const [trending,setTrending]=useState([]);
+  const [loading,setLoading]=useState(false);
+  const [trendErr,setTrendErr]=useState("");
+  const [topics,setTopics]=useState(["","",""]);
+  const [selTypes,setSelTypes]=useState(["cliffhanger","explanatory"]);
+  const [usedRec,setUsedRec]=useState(false);
+  const week=weeks.find(w=>w.id===selWeek);
+  const hasRecs=lastInsight&&lastInsight.nextNiches&&lastInsight.nextNiches.length>0;
+  const validTopics=topics.filter(t=>t.trim().length>0);
+  const canLock=validTopics.length>0&&selTypes.length>0&&niche.trim().length>0;
+  const spt=validTopics.length>0?Math.ceil(21/validTopics.length):7;
+  const doSearch=async()=>{if(!niche.trim()){setTrendErr("Enter a niche first");return;}setTrendErr("");setLoading(true);setTrending([]);try{const d=await claudeCall([{role:"user",content:"Generate 8 specific trending YouTube Shorts topic ideas for the \""+niche.trim()+"\" niche. Make each specific and clickable with high viral potential. Heat score 70-99. Return ONLY valid JSON:\n[{\"topic\":\"specific topic\",\"heat\":95,\"source\":\"YouTube\"},...]"}],{maxTokens:900});const t=tryJSON(getText(d))||[];if(t.length){setTrending(t);}else{setTrendErr("Try a more specific niche e.g. AI Tools, Personal Finance");}}catch{setTrendErr("Search failed — check connection");}setLoading(false);};
+  const setTopic=(idx,val)=>{const u=[...topics];u[idx]=val;setTopics(u);};
+  const pickTrending=(txt)=>{const empty=topics.findIndex(t=>t.trim()==="");const u=[...topics];u[empty>=0?empty:2]=txt;setTopics(u);};
+  const toggleType=id=>setSelTypes(p=>p.includes(id)?p.filter(t=>t!==id):[...p,id]);
+  const lockWeek=()=>{if(!canLock)return;const isFirst=weeks.filter(x=>x.status==="live").length===0;setWeeks(prev=>prev.map(w=>w.id===selWeek?{...w,status:isFirst?"live":"draft",frozen:isFirst,niche:niche.trim(),topic:validTopics[0],topics:validTopics,contentTypes:selTypes,slots:makeSlots(selTypes,validTopics)}:w));setTopics(["","",""]);setNiche("");setTrending([]);setUsedRec(false);};
+  const inpStyle={width:"100%",borderRadius:"8px",padding:"10px 14px",fontSize:"13px"};
+  return <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+    <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Weekly Planner</h2><p style={{color:"var(--text3)",fontSize:"13px",marginTop:"3px"}}>One niche · Multiple topics · 21 videos · Rolling runway</p></div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"8px"}}>{weeks.map(w=><ZoneCard key={w.id} week={w.id} niche={w.niche} status={w.status} score={w.score} frozen={w.frozen} selected={selWeek===w.id} onClick={()=>setSelWeek(w.id)}/>)}</div>
+    {week&&(week.status==="live"||week.status==="draft")&&!week.frozen&&<Card accent="#FF6B3544"><SL color="#FF6B35">WEEK {selWeek} LOCKED</SL><p style={{fontSize:"13px",color:"var(--text3)",marginBottom:"10px"}}>Go to <strong style={{color:"#ADFF2F"}}>Content Engine</strong> to generate scripts and export jobs.</p><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}><Tag color="#FF6B35">{week.niche}</Tag>{(week.topics||[]).map((t,i)=><Tag key={i} color="#00CFFF">{t.slice(0,28)}</Tag>)}</div></Card>}
+    {week&&week.frozen&&<Card accent="rgba(173,255,47,0.2)"><SL color="#ADFF2F">WEEK {selWeek} — LIVE</SL><p style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.75}}>Publishing automatically 3x/day via Buffer.</p></Card>}
+    {week&&week.status==="intention"&&<Card style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+      <div style={{fontWeight:700,fontSize:"16px"}}>Planning Week {selWeek}{weeks.filter(x=>x.status==="live").length===0?" — This becomes your live Week 1":""}</div>
+      {hasRecs&&<div style={{background:"var(--bg3)",border:"1px solid rgba(0,207,255,0.15)",borderRadius:"12px",padding:"14px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}><div style={{width:22,height:22,borderRadius:"50%",background:"rgba(0,207,255,0.1)",border:"1px solid rgba(0,207,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"11px",color:"#00CFFF"}}>◈</div><SL color="#00CFFF">ENGINE RECOMMENDS</SL></div>
+        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{lastInsight.nextNiches.map((n,i)=><button key={i} onClick={()=>{setNiche(n);setUsedRec(true);}} style={{background:usedRec&&niche===n?"rgba(13,26,13,0.8)":"var(--card2)",border:"1px solid "+(usedRec&&niche===n?"#ADFF2F":i===0?"rgba(255,107,53,0.4)":"var(--border)"),color:i===0?"#FF6B35":"var(--text3)",padding:"7px 14px",borderRadius:"8px",fontFamily:"Syne",fontWeight:i===0?700:400,fontSize:"13px",cursor:"pointer"}}>{i===0&&"★ "}{n}</button>)}</div>
+      </div>}
+      {!hasRecs&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px"}}><p style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",lineHeight:1.7}}>Engine recommendations appear after your first analytics run.</p></div>}
+      <div><SL>STEP 1 — NICHE</SL><input value={niche} onChange={e=>{setNiche(e.target.value);setUsedRec(false);}} placeholder="e.g. AI Tools, Personal Finance, True Crime..." style={inpStyle}/></div>
+      <div>
+        <SL>STEP 2 — TOPICS (up to 3, ~{spt} videos each)</SL>
+        {[0,1,2].map(idx=><div key={idx} style={{marginBottom:"8px"}}><div style={{fontSize:"11px",color:"var(--text4)",fontFamily:"Space Mono",marginBottom:"3px"}}>TOPIC {idx+1} {idx===0?"(required)":"(optional)"}</div><input value={topics[idx]} onChange={e=>setTopic(idx,e.target.value)} placeholder={idx===0?"Main topic...":idx===1?"Second angle (optional)...":"Third angle (optional)..."} style={{...inpStyle,background:topics[idx]?"rgba(13,26,13,0.5)":"var(--input-bg)",border:"1px solid "+(topics[idx]?"rgba(173,255,47,0.3)":"var(--input-border)")}}/></div>)}
+        <div style={{marginTop:"10px"}}><Btn variant="outline" small onClick={doSearch}>{loading?<><Spinner size={12}/>Searching...</>:"Search Trending Topics"}</Btn></div>
+        {trendErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"8px"}}>{trendErr}</div>}
+        {trending.length>0&&<div style={{marginTop:"10px",display:"flex",flexDirection:"column",gap:"4px"}}>{trending.map((t,i)=>{const added=topics.some(tp=>tp===t.topic);return <div key={i} onClick={()=>!added&&pickTrending(t.topic)} style={{display:"flex",alignItems:"center",gap:"10px",padding:"8px 12px",borderRadius:"8px",cursor:added?"default":"pointer",background:added?"rgba(13,26,13,0.5)":"var(--card2)",border:"1px solid "+(added?"rgba(173,255,47,0.3)":"var(--border)"),opacity:added?0.7:1,transition:"all .15s"}}><div style={{fontFamily:"Space Mono",fontSize:"12px",fontWeight:700,width:26,flexShrink:0,color:t.heat>92?"#FF2D6B":t.heat>87?"#FF6B35":"#ADFF2F"}}>{t.heat}</div><div style={{flex:1,fontSize:"13px"}}>{t.topic}</div><div style={{fontFamily:"Space Mono",fontSize:"9px",color:added?"#ADFF2F":"var(--text4)"}}>{added?"✓":t.source}</div></div>;})}</div>}
+      </div>
+      <div>
+        <SL>STEP 3 — CONTENT TYPE MIX</SL>
+        <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"8px"}}>{CTYPES.map(ct=><button key={ct.id} onClick={()=>toggleType(ct.id)} style={{background:selTypes.includes(ct.id)?ct.color+"22":"var(--card2)",border:"1px solid "+(selTypes.includes(ct.id)?ct.color:"var(--border)"),color:selTypes.includes(ct.id)?ct.color:"var(--text3)",padding:"6px 12px",borderRadius:"20px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",transition:"all .15s"}}>{ct.label}</button>)}</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>21 videos · {selTypes.length} format{selTypes.length!==1?"s":""} · {validTopics.length||1} topic{validTopics.length!==1?"s":""}</div>
+      </div>
+      {canLock&&<div style={{background:"rgba(13,26,13,0.4)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:"10px",padding:"12px 14px"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>WEEK {selWeek} SUMMARY</div>
+        <div style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.8}}><div>Niche: <strong style={{color:"var(--text)"}}>{niche}</strong></div>{validTopics.map((t,i)=><div key={i}>Topic {i+1}: <strong style={{color:"var(--text)"}}>{t}</strong> — {spt} videos</div>)}<div>Formats: <strong style={{color:"var(--text)"}}>{selTypes.join(", ")}</strong></div></div>
+      </div>}
+      <Btn onClick={lockWeek} disabled={!canLock}>Lock Week {selWeek} and Start</Btn>
+    </Card>}
+  </div>;
+}
 
-  const activeWeek = weeks.find(w=>w.id===activeId)||workable[0];
-  const isDark = theme==="dark";
-  const cardBg   = "var(--card)";
-  const cardBord = "var(--border)";
-  const textMute = "var(--text4)";
-  const textSub  = "var(--text3)";
-
+// ── Content Engine ────────────────────────────
+function ContentEngine({weeks,setWeeks,settings,onNavigate}){
+  const workable=weeks.filter(w=>w.slots&&w.slots.length>0&&(w.status==="draft"||w.status==="live"));
+  const lastW=workable[workable.length-1];
+  const [activeId,setActiveId]=useState(lastW?lastW.id:null);
+  const [generating,setGenerating]=useState(false);
+  const [genProgress,setGenProgress]=useState(0);
+  const [genTotal,setGenTotal]=useState(0);
+  const [expanded,setExpanded]=useState(null);
+  const [exported,setExported]=useState(false);
+  const [showImport,setShowImport]=useState(false);
+  const [manifest,setManifest]=useState("");
+  const [importErr,setImportErr]=useState("");
+  const [importOk,setImportOk]=useState(false);
+  const activeWeek=weeks.find(w=>w.id===activeId)||workable[0];
   const updateSlot=(wid,sid,up)=>setWeeks(prev=>prev.map(w=>w.id===wid?{...w,slots:w.slots.map(s=>s.id===sid?{...s,...up}:s)}:w));
-
   const generateAll=async()=>{
     if(!activeWeek||!activeWeek.slots)return;
     const pending=activeWeek.slots.filter(s=>s.status==="pending");
@@ -522,416 +311,296 @@ function ContentEngine({weeks, setWeeks, settings, onNavigate, theme}) {
     setGenerating(true);setGenTotal(pending.length);setGenProgress(0);
     for(let i=0;i<pending.length;i+=3){
       const batch=pending.slice(i,i+3);
-      try{
-        const slotInfo=batch.map(s=>({topic:s.topic||activeWeek.topic||"general",contentType:s.contentType}));
-        const scripts=await genScripts(slotInfo,activeWeek.evolvedPrompt);
-        batch.forEach((slot,j)=>{if(scripts[j])updateSlot(activeWeek.id,slot.id,{script:scripts[j],status:"script_ready"});});
-      }catch(e){console.error(e);}
+      try{const si=batch.map(s=>({topic:s.topic||activeWeek.topic||"general",contentType:s.contentType}));const scripts=await genScripts(si,activeWeek.evolvedPrompt);batch.forEach((slot,j)=>{if(scripts[j])updateSlot(activeWeek.id,slot.id,{script:scripts[j],status:"script_ready"});});}catch(e){console.error(e);}
       setGenProgress(Math.min(i+3,pending.length));
     }
     setGenerating(false);
   };
-
   const doExport=()=>{
     if(!activeWeek)return;
-    const jobs=activeWeek.slots.map(s=>({
-      jobId:s.id, weekId:activeWeek.id, niche:activeWeek.niche, topic:s.topic||activeWeek.topic,
-      day:DAYS[s.day], time:TIMES[s.time], contentType:s.contentType,
-      voiceId:settings.voiceId||"en-US-ChristopherNeural",
-      targetDuration:settings.targetDuration||55,
-      script:s.script?s.script.script:"",
-      hook:s.script?s.script.hook:"",
-      title:s.script?s.script.title:"",
-      ytCaption:s.script?s.script.ytCaption:"",
-      keywords:s.keywords||[],
-      footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration})),
-      instagramEnabled:settings.instagramEnabled||false,
-    }));
+    const jobs=activeWeek.slots.map(s=>({jobId:s.id,weekId:activeWeek.id,niche:activeWeek.niche,topic:s.topic||activeWeek.topic,day:DAYS[s.day],time:TIMES[s.time],contentType:s.contentType,voiceId:settings.voiceId||"en-US-ChristopherNeural",targetDuration:settings.targetDuration||55,script:s.script?s.script.script:"",hook:s.script?s.script.hook:"",title:s.script?s.script.title:"",ytCaption:s.script?s.script.ytCaption:"",keywords:s.keywords||[],footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration})),instagramEnabled:settings.instagramEnabled||false}));
     const blob=new Blob([JSON.stringify(jobs,null,2)],{type:"application/json"});
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement("a");a.href=url;a.download="week"+activeWeek.id+"_jobs.json";a.click();
-    URL.revokeObjectURL(url);setExported(true);
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="week"+activeWeek.id+"_jobs.json";a.click();URL.revokeObjectURL(url);setExported(true);
   };
-
   const doImport=()=>{
     setImportErr("");setImportOk(false);
-    try{
-      const m=JSON.parse(manifest);
-      if(!Array.isArray(m))throw new Error();
-      setWeeks(prev=>prev.map(w=>{
-        if(w.id!==activeWeek.id)return w;
-        return{...w,slots:w.slots.map(s=>{
-          const e=m.find(x=>x.jobId===s.id);
-          return e?{...s,youtubeId:e.youtubeId||s.youtubeId,scheduleStatus:e.scheduleStatus||s.scheduleStatus,igScheduled:e.igScheduled||s.igScheduled}:s;
-        })};
-      }));
-      setImportOk(true);setShowImport(false);setManifest("");
-    }catch{setImportErr("Invalid JSON — paste the manifest.json from the pipeline");}
+    try{const m=JSON.parse(manifest);if(!Array.isArray(m))throw new Error();setWeeks(prev=>prev.map(w=>{if(w.id!==activeWeek.id)return w;return{...w,slots:w.slots.map(s=>{const e=m.find(x=>x.jobId===s.id);return e?{...s,youtubeId:e.youtubeId||s.youtubeId,scheduleStatus:e.scheduleStatus||s.scheduleStatus}:s;})}}));setImportOk(true);setShowImport(false);setManifest("");}
+    catch{setImportErr("Invalid JSON — paste manifest.json from the pipeline");}
   };
+  if(!workable.length)return <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2><Card><SL>NO WEEKS LOCKED YET</SL><p style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.75,marginBottom:"14px"}}>Go to <strong style={{color:"#ADFF2F"}}>Planner</strong> to lock a week first.</p><Btn small variant="green" onClick={()=>onNavigate("planner")}>Go to Planner</Btn></Card></div>;
+  const slots=activeWeek?activeWeek.slots:[];
+  const pendingCt=slots.filter(s=>s.status==="pending").length;
+  const scriptCt=slots.filter(s=>s.status==="script_ready"&&s.script).length;
+  const scheduledCt=slots.filter(s=>s.scheduleStatus==="youtube_done").length;
+  const SC={pending:"var(--border2)",script_ready:"#FF6B35",scheduled:"#ADFF2F"};
 
-  if(!workable.length) return(
-    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
-      <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"12px",padding:"18px"}}>
-        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",letterSpacing:"0.1em",marginBottom:"12px"}}>NO WEEKS LOCKED YET</div>
-        <p style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.75,marginBottom:"14px"}}>Go to <strong style={{color:"#ADFF2F"}}>Planner</strong> to lock a week first.</p>
-        <button onClick={()=>onNavigate("planner")} style={{background:"#0D1A0D",color:"#ADFF2F",border:"1px solid #ADFF2F44",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>Go to Planner</button>
+  const stepStyle=(active,done)=>({background:done?"rgba(10,26,10,0.5)":active?"var(--card)":"var(--card2)",border:"1px solid "+(done?"rgba(173,255,47,0.2)":active?"#ADFF2F":"var(--border)"),borderRadius:"12px",padding:"18px",transition:"all .3s"});
+
+  return <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+    <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2><p style={{color:"var(--text3)",fontSize:"13px",marginTop:"3px"}}>Scripts → Export → Pipeline → YouTube via Buffer</p></div>
+    {workable.length>1&&<div style={{display:"flex",gap:"4px",background:"var(--bg4)",border:"1px solid var(--border)",padding:"4px",borderRadius:"10px",alignSelf:"flex-start"}}>{workable.map(w=><button key={w.id} onClick={()=>{setActiveId(w.id);setExpanded(null);setExported(false);setImportOk(false);}} style={{background:activeId===w.id?"#ADFF2F":"transparent",color:activeId===w.id?"#08080E":"var(--text3)",border:"none",padding:"6px 12px",borderRadius:"7px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>Week {w.id}</button>)}</div>}
+    {activeWeek&&<div style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:"10px",padding:"10px 14px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}><Tag color="#FF6B35">Week {activeWeek.id}</Tag><Tag color="#B06EF3">{activeWeek.niche}</Tag>{(activeWeek.topics||[]).map((t,i)=><Tag key={i} color="var(--text4)">T{i+1}: {t.slice(0,22)}</Tag>)}</div>}
+    <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+      <StatBox label="Scripts"    value={scriptCt+"/21"}   sub="generated"  accent="#FF6B35"/>
+      <StatBox label="Exported"   value={exported?"✓":"—"} sub="jobs file"  accent={exported?"#ADFF2F":"var(--text4)"}/>
+      <StatBox label="On YouTube" value={scheduledCt+"/21"} sub="scheduled" accent="#ADFF2F"/>
+      <StatBox label="Pending"    value={pendingCt}         sub="scripts"   accent={pendingCt>0?"#FF2D6B":"#ADFF2F"}/>
+    </div>
+
+    {/* Step 1 */}
+    <div style={stepStyle(pendingCt>0,scriptCt===21)}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div><SL color={scriptCt===21?"#ADFF2F":undefined}>STEP 1 — GENERATE SCRIPTS</SL>
+          {scriptCt>0&&<div style={{background:"var(--bg4)",borderRadius:"4px",height:"4px",width:"200px"}}><div style={{width:(scriptCt/21*100)+"%",height:"100%",background:"#FF6B35",borderRadius:"4px",transition:"width .5s"}}/></div>}
+        </div>
+        {generating?<div style={{display:"flex",alignItems:"center",gap:"8px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"8px",padding:"8px 12px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
+          :<Btn small onClick={generateAll} disabled={!pendingCt}>{pendingCt?"Generate "+pendingCt+" Scripts":"All Scripts Done ✓"}</Btn>}
       </div>
     </div>
-  );
 
-  const slots       = activeWeek?activeWeek.slots:[];
-  const pendingCt   = slots.filter(s=>s.status==="pending").length;
-  const scriptCt    = slots.filter(s=>s.status==="script_ready"&&s.script).length;
-  const scheduledCt = slots.filter(s=>s.scheduleStatus==="youtube_done").length;
-  const SC  = {pending:"#2a2a3a",script_ready:"#FF6B35",keywords_extracted:"#00CFFF",footage_found:"#B06EF3",scheduled:"#ADFF2F"};
-  const SLM = {pending:"PENDING",script_ready:"SCRIPT ✓",scheduled:"ON YT ✓"};
-
-  const stepCard = (active, done) => ({
-    background: done?"#0A1A0A":active?"var(--card)":"var(--card2)",
-    border: "1px solid "+(done?"#ADFF2F33":active?"#ADFF2F":"var(--border)"),
-    borderRadius:"12px", padding:"18px", transition:"all .3s",
-  });
-
-  return(
-    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div>
-        <h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Content Engine</h2>
-        <p style={{color:"var(--text3)",fontSize:"13px",marginTop:"3px"}}>Scripts → Export → Pipeline → YouTube via Buffer</p>
+    {/* Step 2 */}
+    <div style={stepStyle(scriptCt===21&&!exported,exported)}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div><SL color={exported?"#ADFF2F":undefined}>STEP 2 — EXPORT JOBS FILE</SL><p style={{fontSize:"12px",color:"var(--text3)"}}>Downloads week{activeWeek?.id}_jobs.json — give this to Claude Code</p></div>
+        <Btn small onClick={doExport} disabled={!scriptCt} variant={exported?"outline":"primary"}>{exported?"✓ Exported":"↓ Export Jobs"}</Btn>
       </div>
-
-      {workable.length>1&&<div style={{display:"flex",gap:"4px",background:"var(--bg4)",border:"1px solid var(--border)",padding:"4px",borderRadius:"10px",alignSelf:"flex-start"}}>{workable.map(w=><button key={w.id} onClick={()=>{setActiveId(w.id);setExpanded(null);setExported(false);setImportOk(false);}} style={{background:activeId===w.id?"#ADFF2F":"transparent",color:activeId===w.id?"#08080E":textSub,border:"none",padding:"6px 12px",borderRadius:"7px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>Week {w.id}</button>)}</div>}
-
-      {activeWeek&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"10px 14px",display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
-        <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#FF6B35",background:"#FF6B3518",border:"1px solid #FF6B3544",padding:"3px 9px",borderRadius:"20px"}}>Week {activeWeek.id}</span>
-        <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#B06EF3",background:"#B06EF318",border:"1px solid #B06EF344",padding:"3px 9px",borderRadius:"20px"}}>{activeWeek.niche}</span>
-        {(activeWeek.topics||[]).map((t,i)=><span key={i} style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",background:"#55551a",border:"1px solid #55554a",padding:"3px 9px",borderRadius:"20px"}}>T{i+1}: {t.slice(0,22)}</span>)}
+      {exported&&<div style={{marginTop:"12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"12px 14px"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>TELL CLAUDE CODE:</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#00CFFF",background:"var(--bg4)",borderRadius:"6px",padding:"8px 12px",lineHeight:1.8}}>"Run the Rand00mscroll pipeline with week{activeWeek?.id}_jobs.json"</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginTop:"8px",lineHeight:1.8}}>Pipeline assembles videos (Pexels + Edge TTS + ffmpeg) and uploads via Buffer automatically. Returns manifest.json when done.</div>
       </div>}
-
-      {/* Progress overview */}
-      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-        <div style={{flex:1,minWidth:"90px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:"#FF6B35",lineHeight:1}}>{scriptCt}/21</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"5px"}}>Scripts</div></div>
-        <div style={{flex:1,minWidth:"90px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:exported?"#ADFF2F":"#555",lineHeight:1}}>{exported?"✓":"—"}</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"5px"}}>Exported</div></div>
-        <div style={{flex:1,minWidth:"90px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:"#ADFF2F",lineHeight:1}}>{scheduledCt}/21</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"5px"}}>On YouTube</div></div>
-        <div style={{flex:1,minWidth:"90px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"12px 14px"}}><div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:pendingCt>0?"#FF2D6B":"#ADFF2F",lineHeight:1}}>{pendingCt}</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"5px"}}>Pending</div></div>
-      </div>
-
-      {/* STEP 1 — Scripts */}
-      <div style={stepCard(pendingCt>0, scriptCt===21)}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:scriptCt===21?"#ADFF2F":textMute,letterSpacing:"0.1em",marginBottom:"6px"}}>STEP 1 — GENERATE SCRIPTS</div>
-            {scriptCt>0&&<div style={{background:"var(--bg4)",borderRadius:"4px",height:"4px",width:"200px"}}><div style={{width:(scriptCt/21*100)+"%",height:"100%",background:"#FF6B35",borderRadius:"4px",transition:"width .5s"}}/></div>}
-          </div>
-          {generating
-            ?<div style={{display:"flex",alignItems:"center",gap:"8px",background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"8px 12px"}}><span style={{display:"inline-block",width:12,height:12,border:"2px solid #ADFF2F",borderTopColor:"transparent",borderRadius:"50%",animation:"spin .7s linear infinite"}}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{genProgress}/{genTotal}</span></div>
-            :<button onClick={generateAll} disabled={!pendingCt} style={{background:!pendingCt?p.disabled?"#1c1c28":"#ADFF2F",color:!pendingCt?"#444":"#08080E",border:"none",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:!pendingCt?"not-allowed":"pointer"}}>{pendingCt?"Generate "+pendingCt+" Scripts":"All Scripts Done ✓"}</button>
-          }
-        </div>
-      </div>
-
-      {/* STEP 2 — Export Jobs */}
-      <div style={stepCard(scriptCt===21&&!exported, exported)}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:exported?"#ADFF2F":textMute,letterSpacing:"0.1em",marginBottom:"4px"}}>STEP 2 — EXPORT JOBS FILE</div>
-            <p style={{fontSize:"12px",color:"var(--text3)"}}>Downloads week{activeWeek?.id}_jobs.json — give this to the pipeline</p>
-          </div>
-          <button onClick={doExport} disabled={!scriptCt} style={{background:!scriptCt?"#1c1c28":exported?"#0D1A0D":"#ADFF2F",color:!scriptCt?"#444":exported?"#ADFF2F":"#08080E",border:exported?"1px solid #ADFF2F44":"none",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:!scriptCt?"not-allowed":"pointer"}}>{exported?"✓ Exported":"↓ Export Jobs"}</button>
-        </div>
-        {exported&&<div style={{marginTop:"12px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"12px 14px"}}>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>RUN PIPELINE ON WINDOWS LAPTOP</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)",lineHeight:2}}>
-            <div>1. Move <span style={{color:"#00CFFF"}}>week{activeWeek?.id}_jobs.json</span> to your pipeline folder</div>
-            <div>2. Open Claude Code in that folder and say:</div>
-            <div style={{color:"#ADFF2F",marginLeft:"16px"}}>"Run the pipeline with week{activeWeek?.id}_jobs.json"</div>
-            <div>3. Pipeline assembles videos + uploads via Buffer automatically</div>
-            <div>4. When done, import manifest.json below ↓</div>
-          </div>
-        </div>}
-      </div>
-
-      {/* STEP 3 — Import Results */}
-      <div style={stepCard(exported&&scheduledCt===0, scheduledCt===21)}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showImport?"12px":"0"}}>
-          <div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:scheduledCt===21?"#ADFF2F":textMute,letterSpacing:"0.1em",marginBottom:"4px"}}>STEP 3 — IMPORT RESULTS</div>
-            <p style={{fontSize:"12px",color:"var(--text3)"}}>
-              {scheduledCt===21?"All 21 videos scheduled on YouTube ✓":"After pipeline runs, paste manifest.json here to sync status"}
-            </p>
-          </div>
-          {scheduledCt<21
-            ?<button onClick={()=>setShowImport(!showImport)} style={{background:"transparent",color:"#ADFF2F",border:"1px solid #ADFF2F44",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>{importOk?"✓ Synced":"Import Results"}</button>
-            :<div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/><span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>Live on YouTube</span></div>
-          }
-        </div>
-        {showImport&&<div>
-          <textarea value={manifest} onChange={e=>setManifest(e.target.value)} rows={4}
-            placeholder='[{"jobId":"abc","scheduleStatus":"youtube_done","bufferUpdateId":"xxx"},...]'
-            style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px",color:"var(--text)",fontSize:"12px",fontFamily:"Space Mono",lineHeight:1.6,marginBottom:"10px"}}/>
-          {importErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px"}}>{importErr}</div>}
-          <div style={{display:"flex",gap:"8px"}}>
-            <button onClick={doImport} style={{background:"#ADFF2F",color:"#08080E",border:"none",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>Import and Sync</button>
-            <button onClick={()=>{setShowImport(false);setManifest("");setImportErr("");}} style={{background:"transparent",color:"var(--text3)",border:"1px solid var(--border)",fontFamily:"Syne",fontWeight:700,fontSize:"12px",padding:"7px 14px",borderRadius:"8px",cursor:"pointer"}}>Cancel</button>
-          </div>
-        </div>}
-      </div>
-
-      {/* Slot list */}
-      {DAYS.map((day,dayIdx)=>{
-        const daySlots=slots.filter(s=>s.day===dayIdx);
-        const dayReady=daySlots.filter(s=>s.status!=="pending").length;
-        const daySched=daySlots.filter(s=>s.scheduleStatus==="youtube_done").length;
-        return(
-          <div key={day}>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",letterSpacing:"0.1em",marginBottom:"8px"}}>{day.toUpperCase()} — {dayReady}/3 scripts · {daySched}/3 on YouTube</div>
-            <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
-              {daySlots.map(slot=>{
-                const ct=CTYPES.find(t=>t.id===slot.contentType);
-                return(
-                  <div key={slot.id} style={{background:"var(--card2)",border:"1px solid "+(expanded===slot.id?"#ADFF2F33":"var(--border)"),borderRadius:"10px",overflow:"hidden"}}>
-                    <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",cursor:"pointer"}} onClick={()=>setExpanded(expanded===slot.id?null:slot.id)}>
-                      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",width:"50px",flexShrink:0}}>{TIMES[slot.time]}</div>
-                      <div style={{width:6,height:6,borderRadius:"50%",background:SC[slot.status]||"#2a2a3a",flexShrink:0}}/>
-                      <div style={{flex:1,fontSize:"13px",fontWeight:slot.script?600:400,color:slot.script?"var(--text)":textMute,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                        {slot.script?slot.script.title:(slot.topic||"Waiting...")}
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
-                        {slot.scheduleStatus==="youtube_done"&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F"}}>YT✓</span>}
-                        {ct&&<span style={{fontSize:"11px",color:ct.color,fontWeight:700}}>{ct.label}</span>}
-                      </div>
-                    </div>
-                    {expanded===slot.id&&slot.script&&(
-                      <div style={{padding:"0 12px 12px",borderTop:"1px solid "+cardBord}}>
-                        <div style={{background:"var(--bg3)",borderRadius:"8px",padding:"12px",margin:"10px 0"}}>
-                          <div style={{fontSize:"10px",color:"var(--text4)",fontWeight:700,marginBottom:"4px"}}>HOOK</div>
-                          <div style={{fontSize:"13px",color:"#ADFF2F",fontStyle:"italic",marginBottom:"10px"}}>"{slot.script.hook}"</div>
-                          <div style={{fontSize:"10px",color:"var(--text4)",fontWeight:700,marginBottom:"4px"}}>SCRIPT</div>
-                          <div style={{fontSize:"13px",color:"var(--text2)",lineHeight:1.7}}>{slot.script.script}</div>
-                          {slot.script.ytCaption&&<><div style={{fontSize:"10px",color:"var(--text4)",fontWeight:700,marginTop:"10px",marginBottom:"4px"}}>CAPTION</div><div style={{fontSize:"11px",color:"var(--text3)",fontFamily:"Space Mono"}}>{slot.script.ytCaption}</div></>}
-                        </div>
-                        {slot.youtubeId&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F33",borderRadius:"6px",padding:"7px 10px",fontSize:"11px",fontFamily:"Space Mono",color:"#ADFF2F"}}>youtube.com/watch?v={slot.youtubeId}</div>}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
     </div>
-  );
+
+    {/* Step 3 */}
+    <div style={stepStyle(exported&&scheduledCt===0,scheduledCt===21)}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:showImport?"12px":"0"}}>
+        <div><SL color={scheduledCt===21?"#ADFF2F":undefined}>STEP 3 — IMPORT RESULTS</SL>
+          <p style={{fontSize:"12px",color:"var(--text3)"}}>{scheduledCt===21?"All 21 videos scheduled on YouTube ✓":"After pipeline finishes, paste manifest.json here"}</p>
+        </div>
+        {scheduledCt<21
+          ?<Btn small variant="ghost" onClick={()=>setShowImport(!showImport)}>{importOk?"✓ Synced":"Import Results"}</Btn>
+          :<div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/><span style={{fontSize:"13px",color:"#ADFF2F",fontWeight:700}}>Live on YouTube</span></div>}
+      </div>
+      {showImport&&<div>
+        <textarea value={manifest} onChange={e=>setManifest(e.target.value)} rows={4} placeholder='[{"jobId":"abc","scheduleStatus":"youtube_done"},...]'
+          style={{width:"100%",borderRadius:"8px",padding:"10px",fontSize:"12px",fontFamily:"Space Mono",lineHeight:1.6,marginBottom:"10px"}}/>
+        {importErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px"}}>{importErr}</div>}
+        <div style={{display:"flex",gap:"8px"}}><Btn small onClick={doImport}>Import and Sync</Btn><Btn small variant="ghost" onClick={()=>{setShowImport(false);setManifest("");setImportErr("");}}>Cancel</Btn></div>
+      </div>}
+    </div>
+
+    {/* Slot list */}
+    {DAYS.map((day,dayIdx)=>{
+      const daySlots=slots.filter(s=>s.day===dayIdx);
+      const dayReady=daySlots.filter(s=>s.status!=="pending").length;
+      const daySched=daySlots.filter(s=>s.scheduleStatus==="youtube_done").length;
+      return <div key={day}>
+        <SL>{day.toUpperCase()} — {dayReady}/3 scripts · {daySched}/3 on YouTube</SL>
+        <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+          {daySlots.map(slot=>{
+            const ct=CTYPES.find(t=>t.id===slot.contentType);
+            return <div key={slot.id} style={{background:"var(--slot-bg)",border:"1px solid "+(expanded===slot.id?"rgba(173,255,47,0.2)":"var(--border)"),borderRadius:"10px",overflow:"hidden",transition:"border .2s"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px",cursor:"pointer"}} onClick={()=>setExpanded(expanded===slot.id?null:slot.id)}>
+                <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",width:"50px",flexShrink:0}}>{TIMES[slot.time]}</div>
+                <div style={{width:6,height:6,borderRadius:"50%",background:SC[slot.status]||"var(--border2)",flexShrink:0}}/>
+                <div style={{flex:1,fontSize:"13px",fontWeight:slot.script?600:400,color:slot.script?"var(--text)":"var(--text4)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:(slot.topic||"Waiting...")}</div>
+                <div style={{display:"flex",alignItems:"center",gap:"5px",flexShrink:0}}>
+                  {slot.scheduleStatus==="youtube_done"&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F"}}>YT✓</span>}
+                  {ct&&<span style={{fontSize:"11px",color:ct.color,fontWeight:700}}>{ct.label}</span>}
+                </div>
+              </div>
+              {expanded===slot.id&&slot.script&&<div style={{padding:"0 12px 12px",borderTop:"1px solid var(--border)"}}>
+                <div style={{background:"var(--bg3)",borderRadius:"8px",padding:"12px",margin:"10px 0"}}>
+                  <div style={{fontSize:"10px",color:"var(--text4)",fontWeight:700,marginBottom:"4px"}}>HOOK</div>
+                  <div style={{fontSize:"13px",color:"#ADFF2F",fontStyle:"italic",marginBottom:"10px"}}>"{slot.script.hook}"</div>
+                  <div style={{fontSize:"10px",color:"var(--text4)",fontWeight:700,marginBottom:"4px"}}>SCRIPT</div>
+                  <div style={{fontSize:"13px",color:"var(--text2)",lineHeight:1.7}}>{slot.script.script}</div>
+                  {slot.script.ytCaption&&<><div style={{fontSize:"10px",color:"var(--text4)",fontWeight:700,marginTop:"10px",marginBottom:"4px"}}>CAPTION</div><div style={{fontSize:"11px",color:"var(--text3)",fontFamily:"Space Mono"}}>{slot.script.ytCaption}</div></>}
+                </div>
+                {slot.youtubeId&&<div style={{background:"rgba(10,26,10,0.5)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:"6px",padding:"7px 10px",fontSize:"11px",fontFamily:"Space Mono",color:"#ADFF2F"}}>youtube.com/watch?v={slot.youtubeId}</div>}
+              </div>}
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
+  </div>;
 }
 
-// ── Analytics Brain ────────────────────────────────────────────
-function AnalyticsBrain({weeks, setWeeks, lastInsight, setLastInsight}) {
+// ── Analytics Brain ───────────────────────────
+function AnalyticsBrain({weeks,setWeeks,lastInsight,setLastInsight}){
   const [rawData,setRawData]=useState(JSON.stringify(MOCK_ANALYTICS,null,2));
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
   const liveWeek=weeks.find(w=>w.status==="live");
   const run=async()=>{setLoading(true);setError("");try{const p=JSON.parse(rawData);const r=await weeklyInsight(p,liveWeek?liveWeek.niche:"General",liveWeek?liveWeek.evolvedPrompt:"");setLastInsight(r);if(r.evolvedPrompt&&liveWeek)setWeeks(prev=>prev.map(w=>w.id===liveWeek.id?{...w,evolvedPrompt:r.evolvedPrompt}:w));}catch{setError("Paste valid JSON analytics data.");}setLoading(false);};
-  return (
-    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Analytics Brain</h2><p style={{color:"var(--text4)",fontSize:"13px",marginTop:"3px"}}>Paste YouTube data → Claude analyses → Engine evolves</p></div>
-      {lastInsight&&<div style={{background:"#0D1A0D",border:"1px solid #ADFF2F33",borderRadius:"10px",padding:"12px 14px"}}><SL color="#ADFF2F">RECOMMENDATIONS SAVED — IN PLANNER</SL><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{lastInsight.nextNiches&&lastInsight.nextNiches.map((n,i)=><Tag key={i} color={i===0?"#FF6B35":"#555"}>{i===0?"★ ":""}{n}</Tag>)}</div></div>}
-      <Card>
-        <SL>PASTE YOUTUBE ANALYTICS JSON (sample pre-loaded)</SL>
-        <textarea value={rawData} onChange={e=>setRawData(e.target.value)} rows={9} style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px 12px",color:"var(--text)",fontSize:"11px",fontFamily:"Space Mono",lineHeight:1.6}}/>
-        {error&&<div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"6px"}}>{error}</div>}
-        <div style={{marginTop:"12px"}}><Btn onClick={run} disabled={loading}>{loading?<><Spinner/>Analysing...</>:"Run Weekly Analysis"}</Btn></div>
-      </Card>
-      {lastInsight&&<>
-        <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-          <StatBox label="Top Format" value={lastInsight.topFormat||"—"} sub="this week" accent="#FF6B35"/>
-          <StatBox label="CTR" value={MOCK_ANALYTICS.ctr+"%"} sub="avg" accent="#00CFFF"/>
-          <StatBox label="Duration" value={MOCK_ANALYTICS.duration+"%"} sub="avg" accent="#B06EF3"/>
-          <StatBox label="New Subs" value={"+"+MOCK_ANALYTICS.newSubs} sub="this week" accent="#ADFF2F"/>
-        </div>
-        <div style={{background:"#070712",border:"1px solid #00CFFF22",borderRadius:"12px",padding:"18px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}><div style={{width:26,height:26,borderRadius:"50%",background:"#00CFFF14",border:"1px solid #00CFFF44",display:"flex",alignItems:"center",justifyContent:"center",color:"#00CFFF",fontSize:"12px"}}>◈</div><SL color="#00CFFF">CLAUDE INTELLIGENCE DEBRIEF</SL></div>
-          <p style={{fontSize:"13px",color:"var(--text2)",lineHeight:1.75,marginBottom:"12px"}}>{lastInsight.summary}</p>
-          <div style={{background:"#0A0A18",borderRadius:"8px",padding:"10px 12px",borderLeft:"3px solid #00CFFF44"}}><div style={{fontSize:"10px",color:"#00CFFF55",fontWeight:700,marginBottom:"4px"}}>RECOMMENDATION</div><p style={{fontSize:"13px",color:"var(--text2)",lineHeight:1.6}}>{lastInsight.recommendation}</p></div>
-        </div>
-        {lastInsight.adjustments&&lastInsight.adjustments.length>0&&<Card><SL>AUTO-ADJUSTMENTS</SL>{lastInsight.adjustments.map((a,i)=><div key={i} style={{display:"flex",gap:"10px",marginBottom:"9px"}}><div style={{color:"#ADFF2F",flexShrink:0}}>→</div><div style={{fontSize:"13px",color:"var(--text2)"}}>{a}</div></div>)}</Card>}
-        {lastInsight.evolvedPrompt&&<div style={{background:"#0A1A0A",border:"1px solid #ADFF2F22",borderRadius:"12px",padding:"16px"}}><SL color="#ADFF2F">EVOLVED SCRIPT PROMPT — SAVED</SL><p style={{fontSize:"11px",color:"var(--text3)",lineHeight:1.75,fontFamily:"Space Mono"}}>{lastInsight.evolvedPrompt}</p></div>}
-      </>}
-    </div>
-  );
+  return <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+    <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Analytics Brain</h2><p style={{color:"var(--text3)",fontSize:"13px",marginTop:"3px"}}>Paste YouTube data → Claude analyses → Engine evolves</p></div>
+    {lastInsight&&<div style={{background:"rgba(13,26,13,0.4)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:"10px",padding:"12px 14px"}}><SL color="#ADFF2F">RECOMMENDATIONS SAVED — IN PLANNER</SL><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{lastInsight.nextNiches&&lastInsight.nextNiches.map((n,i)=><Tag key={i} color={i===0?"#FF6B35":"var(--text4)"}>{i===0?"★ ":""}{n}</Tag>)}</div></div>}
+    <Card>
+      <SL>PASTE YOUTUBE ANALYTICS JSON (sample pre-loaded)</SL>
+      <textarea value={rawData} onChange={e=>setRawData(e.target.value)} rows={9} style={{width:"100%",borderRadius:"8px",padding:"10px 12px",fontSize:"11px",fontFamily:"Space Mono",lineHeight:1.6}}/>
+      {error&&<div style={{fontSize:"12px",color:"#FF2D6B",marginTop:"6px"}}>{error}</div>}
+      <div style={{marginTop:"12px"}}><Btn onClick={run} disabled={loading}>{loading?<><Spinner/>Analysing...</>:"Run Weekly Analysis"}</Btn></div>
+    </Card>
+    {lastInsight&&<>
+      <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+        <StatBox label="Top Format" value={lastInsight.topFormat||"—"} sub="this week" accent="#FF6B35"/>
+        <StatBox label="CTR"        value={MOCK_ANALYTICS.ctr+"%"}     sub="avg"       accent="#00CFFF"/>
+        <StatBox label="Duration"   value={MOCK_ANALYTICS.duration+"%"} sub="avg"      accent="#B06EF3"/>
+        <StatBox label="New Subs"   value={"+"+MOCK_ANALYTICS.newSubs}  sub="this week" accent="#ADFF2F"/>
+      </div>
+      <div style={{background:"var(--bg3)",border:"1px solid rgba(0,207,255,0.1)",borderRadius:"12px",padding:"18px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px"}}><div style={{width:26,height:26,borderRadius:"50%",background:"rgba(0,207,255,0.1)",border:"1px solid rgba(0,207,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",color:"#00CFFF",fontSize:"12px"}}>◈</div><SL color="#00CFFF">CLAUDE INTELLIGENCE DEBRIEF</SL></div>
+        <p style={{fontSize:"13px",color:"var(--text2)",lineHeight:1.75,marginBottom:"12px"}}>{lastInsight.summary}</p>
+        <div style={{background:"var(--bg4)",borderRadius:"8px",padding:"10px 12px",borderLeft:"3px solid rgba(0,207,255,0.3)"}}><div style={{fontSize:"10px",color:"rgba(0,207,255,0.5)",fontWeight:700,marginBottom:"4px"}}>RECOMMENDATION</div><p style={{fontSize:"13px",color:"var(--text2)",lineHeight:1.6}}>{lastInsight.recommendation}</p></div>
+      </div>
+      {lastInsight.adjustments&&lastInsight.adjustments.length>0&&<Card><SL>AUTO-ADJUSTMENTS</SL>{lastInsight.adjustments.map((a,i)=><div key={i} style={{display:"flex",gap:"10px",marginBottom:"9px"}}><div style={{color:"#ADFF2F",flexShrink:0}}>→</div><div style={{fontSize:"13px",color:"var(--text2)"}}>{a}</div></div>)}</Card>}
+      {lastInsight.evolvedPrompt&&<div style={{background:"rgba(13,26,13,0.4)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:"12px",padding:"16px"}}><SL color="#ADFF2F">EVOLVED SCRIPT PROMPT — SAVED</SL><p style={{fontSize:"11px",color:"var(--text3)",lineHeight:1.75,fontFamily:"Space Mono"}}>{lastInsight.evolvedPrompt}</p></div>}
+    </>}
+  </div>;
 }
 
-// ── Setup ──────────────────────────────────────────────────────
-function Setup({settings, setSettings, onReset, syncStatus}) {
+// ── Setup ─────────────────────────────────────
+function Setup({settings,setSettings,onReset,syncStatus}){
   const [local,setLocal]=useState({...settings});
   const [flash,setFlash]=useState(false);
   const set=(k,v)=>{const u={...local,[k]:v};setLocal(u);setSettings(u);setFlash(true);setTimeout(()=>setFlash(false),1500);};
   const VOICES=["en-US-ChristopherNeural","en-US-AriaNeural","en-US-GuyNeural","en-GB-RyanNeural","en-GB-SoniaNeural","en-AU-WilliamNeural","en-IN-NeerjaNeural"];
-  return (
-    <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
-        <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Setup</h2><p style={{color:"var(--text4)",fontSize:"13px",marginTop:"3px"}}>All fields save automatically</p></div>
-        {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
-      </div>
-
-      {/* Buffer Setup */}
-      <Card>
-        <SL>BUFFER — YOUTUBE SCHEDULING</SL>
-        <div style={{background:"var(--bg3)",border:"1px solid #1a2a1a",borderRadius:"10px",padding:"14px",marginBottom:"14px"}}>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO GET YOUR BUFFER TOKEN</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:1.9}}>
-            <div>1. buffer.com → log in → profile picture → Settings</div>
-            <div>2. Left menu → Developers</div>
-            <div>3. Copy your Access Token</div>
-            <div>4. Paste it below</div>
-          </div>
-        </div>
-        {[
-          {key:"bufferToken",     label:"Buffer Access Token",       type:"password", hint:"Your Buffer access token from Settings → Developers"},
-          {key:"bufferYTProfile", label:"Buffer YouTube Profile ID",  type:"text",     hint:"6a058c6e090476fb991b0ba5 (from your Buffer URL)"},
-          {key:"pexelsKey",       label:"Pexels API Key",            type:"password", hint:"Free at pexels.com/api — for stock footage"},
-        ].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px 14px",color:"var(--text)",fontSize:"13px"}}/></div>)}
-        <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"9px 12px"}}><div style={{fontSize:"10px",color:"var(--text2)",fontFamily:"Space Mono"}}>No Google account needed. Buffer handles YouTube scheduling directly. No OAuth. No credentials file.</div></div>
-      </Card>
-
-      {/* Supabase */}
-      <div style={{border:"1px solid #1a2a1a",borderRadius:"14px",padding:"18px",background:"#060E06"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
-          <span>☁️</span><span style={{fontWeight:800,fontSize:"15px"}}>Supabase Sync</span>
-          <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F",background:"#0D1A0D",border:"1px solid #ADFF2F33",padding:"2px 7px",borderRadius:"10px"}}>CROSS-DEVICE</span>
-          {syncStatus&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":"#FF6B35"}}>{syncStatus.toUpperCase()}</span>}
-        </div>
-        <p style={{fontSize:"12px",color:"var(--text4)",lineHeight:1.7,marginBottom:"14px"}}>Enter once per device. Everything syncs automatically. New device: enter these 3 fields and all data loads instantly.</p>
-        {[{key:"supabaseUrl",label:"Supabase Project URL",type:"text",hint:"https://xxxxxxxxxxxx.supabase.co"},{key:"supabaseKey",label:"Supabase Anon Key",type:"password",hint:"Supabase → Settings → API → anon public"},{key:"channelKey",label:"Channel Key",type:"text",hint:"Your password e.g. rand00mscroll-2025"}].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"var(--bg3)",border:"1px solid #1a2a1a",borderRadius:"8px",padding:"10px 14px",color:"var(--text)",fontSize:"13px"}}/></div>)}
-        <div style={{background:"var(--bg3)",border:"1px solid #1a2a1a",borderRadius:"8px",padding:"10px 12px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"6px"}}>ONE-TIME SQL IN SUPABASE</div><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}><div>create table r00m_data (channel_key text primary key, weeks jsonb, insight jsonb, settings jsonb, updated_at timestamptz default now());</div><div>alter table r00m_data enable row level security;</div><div>create policy "open" on r00m_data for all using (true) with check (true);</div></div></div>
-      </div>
-
-      {/* Posting prefs */}
-      <Card>
-        <SL>POSTING PREFERENCES</SL>
-        <div style={{marginBottom:"14px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"6px"}}>Daily Posting Times</div><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{local.postingTimes.map((t,i)=><input key={i} type="time" value={t} onChange={e=>{const tt=[...local.postingTimes];tt[i]=e.target.value;set("postingTimes",tt);}} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"8px 10px",color:"var(--text)",fontSize:"13px",fontFamily:"Space Mono"}}/>)}</div></div>
-        <div style={{marginBottom:"14px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"6px"}}>Target Duration (seconds)</div><input type="number" value={local.targetDuration} min={30} max={90} onChange={e=>set("targetDuration",+e.target.value)} style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px 12px",color:"var(--text)",fontSize:"13px",fontFamily:"Space Mono",width:"100px"}}/></div>
-      </Card>
-
-      {/* Instagram */}
-      <div style={{border:"2px dashed "+(local.instagramEnabled?"#E1306C44":"#222"),borderRadius:"14px",padding:"18px",background:local.instagramEnabled?"#110009":"transparent"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"12px",marginBottom:local.instagramEnabled?"16px":"0"}}>
-          <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}><span>📸</span><span style={{fontWeight:800,fontSize:"15px"}}>Instagram Reposting</span><span style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text2)",background:"var(--card)",border:"1px solid #222",padding:"2px 7px",borderRadius:"10px"}}>PHASE 2</span></div><p style={{fontSize:"12px",color:"var(--text4)",lineHeight:1.6}}>{local.instagramEnabled?"Active — reposts via Buffer. Traffic flows Instagram → YouTube.":"Off — enable once you are making money."}</p></div>
-          <button onClick={()=>set("instagramEnabled",!local.instagramEnabled)} style={{padding:"10px 20px",borderRadius:"10px",fontFamily:"Syne",fontWeight:800,fontSize:"13px",cursor:"pointer",border:"none",...(local.instagramEnabled?{background:"#E1306C",color:"#fff"}:{background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",color:"#fff"})}}>{local.instagramEnabled?"Disable":"Add Instagram"}</button>
-        </div>
-        {local.instagramEnabled&&<div style={{display:"flex",flexDirection:"column",gap:"10px",paddingTop:"16px",borderTop:"1px solid #2a0015"}}><SL color="#E1306C">BUFFER CREDENTIALS</SL>{[{key:"bufferKey",label:"Buffer Access Token",type:"password",hint:"buffer.com/developers"},{key:"bufferInstagramProfileId",label:"Buffer Instagram Profile ID",type:"text",hint:"GET api.bufferapp.com/1/profiles.json"}].map(f=><div key={f.key}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={{width:"100%",background:"var(--bg3)",border:"1px solid #2a0015",borderRadius:"8px",padding:"10px 12px",color:"var(--text)",fontSize:"13px"}}/></div>)}</div>}
-      </div>
-
-      <Card><SL>MEMORY AND STORAGE</SL><p style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.75,marginBottom:"12px"}}>All data saves automatically. Supabase syncs across devices. Without it, data lives in this browser only.</p><Btn variant="danger" onClick={onReset}>Reset Schedule</Btn></Card>
+  const inpStyle={width:"100%",borderRadius:"8px",padding:"10px 14px",fontSize:"13px"};
+  return <div className="fade-up" style={{display:"flex",flexDirection:"column",gap:"18px"}}>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"8px"}}>
+      <div><h2 style={{fontSize:"24px",fontWeight:800,letterSpacing:"-0.02em"}}>Setup</h2><p style={{color:"var(--text3)",fontSize:"13px",marginTop:"3px"}}>All fields save automatically</p></div>
+      {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
     </div>
-  );
+    <Card>
+      <SL>BUFFER — YOUTUBE SCHEDULING</SL>
+      <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"14px",marginBottom:"14px"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO GET YOUR BUFFER TOKEN</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:1.9}}>
+          <div>1. buffer.com → log in → profile picture → Settings</div>
+          <div>2. Left menu → Developers → copy Access Token</div>
+        </div>
+      </div>
+      {[{key:"bufferToken",label:"Buffer Access Token",type:"password",hint:"Your Buffer access token"},{key:"bufferYTProfile",label:"Buffer YouTube Profile ID",type:"text",hint:"6a058c6e090476fb991b0ba5"},{key:"pexelsKey",label:"Pexels API Key",type:"password",hint:"Free at pexels.com/api — for stock footage"}].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={inpStyle}/></div>)}
+      <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"9px 12px"}}><div style={{fontSize:"10px",color:"var(--text4)",fontFamily:"Space Mono"}}>ANTHROPIC API — connected via /api/claude proxy. No key needed here.</div></div>
+    </Card>
+    <div style={{border:"1px solid rgba(13,26,13,0.8)",borderRadius:"14px",padding:"18px",background:"rgba(6,14,6,0.4)"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
+        <span>☁️</span><span style={{fontWeight:800,fontSize:"15px"}}>Supabase Sync</span>
+        <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F",background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.2)",padding:"2px 7px",borderRadius:"10px"}}>CROSS-DEVICE</span>
+        {syncStatus&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":"#FF6B35"}}>{syncStatus.toUpperCase()}</span>}
+      </div>
+      <p style={{fontSize:"12px",color:"var(--text4)",lineHeight:1.7,marginBottom:"14px"}}>Enter once per device. Everything syncs automatically across all devices.</p>
+      {[{key:"supabaseUrl",label:"Supabase Project URL",type:"text",hint:"https://xxxxxxxxxxxx.supabase.co"},{key:"supabaseKey",label:"Supabase Anon Key",type:"password",hint:"Supabase → Settings → API → anon public"},{key:"channelKey",label:"Channel Key",type:"text",hint:"Your password e.g. rand00mscroll-2025"}].map(f=><div key={f.key} style={{marginBottom:"12px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={inpStyle}/></div>)}
+      <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px 12px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"6px"}}>ONE-TIME SQL IN SUPABASE</div><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}><div>create table r00m_data (channel_key text primary key, weeks jsonb, insight jsonb, settings jsonb, updated_at timestamptz default now());</div><div>alter table r00m_data enable row level security;</div><div>create policy "open" on r00m_data for all using (true) with check (true);</div></div></div>
+    </div>
+    <Card>
+      <SL>POSTING PREFERENCES</SL>
+      <div style={{marginBottom:"14px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"6px"}}>Daily Posting Times</div><div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>{local.postingTimes.map((t,i)=><input key={i} type="time" value={t} onChange={e=>{const tt=[...local.postingTimes];tt[i]=e.target.value;set("postingTimes",tt);}} style={{borderRadius:"8px",padding:"8px 10px",fontSize:"13px",fontFamily:"Space Mono"}}/>)}</div></div>
+      <div style={{marginBottom:"14px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"6px"}}>Voiceover</div><select value={local.voiceId} onChange={e=>set("voiceId",e.target.value)} style={{width:"100%",borderRadius:"8px",padding:"10px 12px",fontSize:"13px"}}>{VOICES.map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+      <div><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"6px"}}>Target Duration (seconds)</div><input type="number" value={local.targetDuration} min={30} max={90} onChange={e=>set("targetDuration",+e.target.value)} style={{borderRadius:"8px",padding:"10px 12px",fontSize:"13px",fontFamily:"Space Mono",width:"100px"}}/></div>
+    </Card>
+    <div style={{border:"2px dashed "+(local.instagramEnabled?"rgba(225,48,108,0.3)":"var(--border)"),borderRadius:"14px",padding:"18px",background:local.instagramEnabled?"rgba(17,0,9,0.3)":"transparent"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:"12px",marginBottom:local.instagramEnabled?"16px":"0"}}>
+        <div style={{flex:1}}><div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}><span>📸</span><span style={{fontWeight:800,fontSize:"15px"}}>Instagram Reposting</span><span style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",background:"var(--bg4)",border:"1px solid var(--border)",padding:"2px 7px",borderRadius:"10px"}}>PHASE 2</span></div><p style={{fontSize:"12px",color:"var(--text4)",lineHeight:1.6}}>{local.instagramEnabled?"Active — reposts via Buffer. Traffic flows Instagram → YouTube.":"Off — enable once you are making money."}</p></div>
+        <button onClick={()=>set("instagramEnabled",!local.instagramEnabled)} style={{padding:"10px 20px",borderRadius:"10px",fontFamily:"Syne",fontWeight:800,fontSize:"13px",cursor:"pointer",border:"none",...(local.instagramEnabled?{background:"#E1306C",color:"#fff"}:{background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",color:"#fff"})}}>{local.instagramEnabled?"Disable":"Add Instagram"}</button>
+      </div>
+      {local.instagramEnabled&&<div style={{display:"flex",flexDirection:"column",gap:"10px",paddingTop:"16px",borderTop:"1px solid rgba(225,48,108,0.2)"}}>
+        <SL color="#E1306C">BUFFER CREDENTIALS</SL>
+        {[{key:"bufferIGProfile",label:"Buffer Instagram Profile ID",type:"text",hint:"GET api.bufferapp.com/1/profiles.json?access_token=..."}].map(f=><div key={f.key}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.label}</div><input type={f.type} value={local[f.key]||""} onChange={e=>set(f.key,e.target.value)} placeholder={f.hint} style={inpStyle}/></div>)}
+      </div>}
+    </div>
+    <Card><SL>MEMORY AND STORAGE</SL><p style={{fontSize:"13px",color:"var(--text3)",lineHeight:1.75,marginBottom:"12px"}}>All data saves automatically. Supabase syncs across all devices. Without it, data lives in this browser only.</p><Btn variant="danger" onClick={onReset}>Reset Schedule</Btn></Card>
+  </div>;
 }
 
-// ── App Root ───────────────────────────────────────────────────
+// ── App Root ──────────────────────────────────
 const TABS=[{id:"command",label:"Overview"},{id:"planner",label:"Planner"},{id:"engine",label:"Engine"},{id:"analytics",label:"Analytics"},{id:"setup",label:"Setup"}];
 
-function App() {
+function App(){
   const [tab,setTab]=useState("command");
+  const [theme,setTheme]=useState(()=>{try{return localStorage.getItem("r00m_theme")||"light";}catch{return "light";}});
   const [weeks,setWeeksRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_weeks");return s?JSON.parse(s):INIT_WEEKS;}catch{return INIT_WEEKS;}});
   const [settings,setSettingsRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_settings");return s?JSON.parse(s):INIT_SETTINGS;}catch{return INIT_SETTINGS;}});
   const [lastInsight,setLastInsightRaw]=useState(()=>{try{const s=localStorage.getItem("r00m_insight");return s?JSON.parse(s):null;}catch{return null;}});
   const [syncStatus,setSyncStatus]=useState("");
   const [sbReady,setSbReady]=useState(false);
-  const [theme,setTheme]=useState(()=>{
-    try{return localStorage.getItem("r00m_theme")||"light";}catch{return "light";}
-  });
 
   // Apply theme to body
-  useEffect(()=>{
-    document.body.className=theme;
-    try{localStorage.setItem("r00m_theme",theme);}catch{}
-  },[theme]);
+  useEffect(()=>{document.body.className=theme;try{localStorage.setItem("r00m_theme",theme);}catch{};},[theme]);
 
+  // Supabase on mount
   useEffect(()=>{
     const {supabaseUrl,supabaseKey,channelKey}=settings;
     if(supabaseUrl&&supabaseKey&&channelKey){
       setSyncStatus("syncing");
       sbLoad(supabaseUrl,supabaseKey,channelKey).then(data=>{
         if(data){
-          if(data.weeks) setWeeksRaw(prev=>{
-            // Don't overwrite videoBlob (not serializable) — keep local blobs
-            return data.weeks.map((w,i)=>({...w,slots:(w.slots||[]).map(s=>({...s,videoBlob:null,videoUrl:null}))}));
-          });
-          if(data.insight) setLastInsightRaw(data.insight);
-          if(data.settings) setSettingsRaw(prev=>({...data.settings,supabaseUrl:prev.supabaseUrl,supabaseKey:prev.supabaseKey,channelKey:prev.channelKey}));
+          if(data.weeks)setWeeksRaw(data.weeks);
+          if(data.insight)setLastInsightRaw(data.insight);
+          if(data.settings)setSettingsRaw(prev=>({...data.settings,supabaseUrl:prev.supabaseUrl,supabaseKey:prev.supabaseKey,channelKey:prev.channelKey}));
           setSyncStatus("synced");
-        } else { setSyncStatus("new"); }
+        }else{setSyncStatus("new");}
         setSbReady(true);
       });
-    } else { setSbReady(true); }
+    }else{setSbReady(true);}
   },[]);
 
   useEffect(()=>{try{localStorage.setItem("r00m_weeks",JSON.stringify(weeks));}catch{}},[weeks]);
   useEffect(()=>{try{localStorage.setItem("r00m_settings",JSON.stringify(settings));}catch{}},[settings]);
   useEffect(()=>{if(lastInsight)try{localStorage.setItem("r00m_insight",JSON.stringify(lastInsight));}catch{}},[lastInsight]);
-
   useEffect(()=>{
     if(!sbReady)return;
     const {supabaseUrl,supabaseKey,channelKey}=settings;
-    if(supabaseUrl&&supabaseKey&&channelKey){
-      // Save weeks without videoBlob (not serializable)
-      const weeksForSave = weeks.map(w=>({...w,slots:(w.slots||[]).map(s=>({...s,videoBlob:null,videoUrl:null}))}));
-      sbSave(supabaseUrl,supabaseKey,channelKey,{weeks:weeksForSave,insight:lastInsight,settings});
-      setSyncStatus("saved");
-    }
+    if(supabaseUrl&&supabaseKey&&channelKey){sbSave(supabaseUrl,supabaseKey,channelKey,{weeks,insight:lastInsight,settings});setSyncStatus("saved");}
   },[weeks,lastInsight,settings,sbReady]);
 
   const setWeeks=v=>setWeeksRaw(v);
   const setSettings=v=>setSettingsRaw(v);
   const setLastInsight=v=>setLastInsightRaw(v);
-
-  const handleReset=()=>{if(!window.confirm("Reset everything? This clears all weeks and starts fresh."))return;setWeeksRaw(INIT_WEEKS);setLastInsightRaw(null);try{localStorage.removeItem("r00m_weeks");localStorage.removeItem("r00m_insight");}catch{}};
+  const handleReset=()=>{if(!window.confirm("Reset everything? Clears all weeks and starts fresh."))return;setWeeksRaw(INIT_WEEKS);setLastInsightRaw(null);try{localStorage.removeItem("r00m_weeks");localStorage.removeItem("r00m_insight");}catch{}};
 
   const draftWeek=weeks.find(w=>w.status==="draft"&&w.slots&&w.slots.length>0);
   const pendingBadge=draftWeek?draftWeek.slots.filter(s=>s.status==="pending").length:0;
 
-  const isDark = theme==="dark";
-  const bg     = "var(--bg)";
-  const fg     = "var(--text)";
-
   const VIEW={
-    command:   <CommandCenter  weeks={weeks} onNavigate={setTab} theme={theme}/>,
-    planner:   <WeeklyPlanner  weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} theme={theme}/>,
-    engine:    <ContentEngine  weeks={weeks} setWeeks={setWeeks} settings={settings} onNavigate={setTab} theme={theme}/>,
-    analytics: <AnalyticsBrain weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} setLastInsight={setLastInsight} theme={theme}/>,
-    setup:     <Setup          settings={settings} setSettings={setSettings} onReset={handleReset} syncStatus={syncStatus} theme={theme}/>,
+    command:   <CommandCenter  weeks={weeks} onNavigate={setTab}/>,
+    planner:   <WeeklyPlanner  weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight}/>,
+    engine:    <ContentEngine  weeks={weeks} setWeeks={setWeeks} settings={settings} onNavigate={setTab}/>,
+    analytics: <AnalyticsBrain weeks={weeks} setWeeks={setWeeks} lastInsight={lastInsight} setLastInsight={setLastInsight}/>,
+    setup:     <Setup          settings={settings} setSettings={setSettings} onReset={handleReset} syncStatus={syncStatus}/>,
   };
 
-  return (
-    <div style={{minHeight:"100vh",background:"var(--bg)"}}>
-      <div style={{position:"sticky",top:0,zIndex:200,background:"var(--topbar)",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderBottom:"1px solid var(--border)",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
-          <div style={{fontWeight:800,fontSize:"16px",letterSpacing:"-0.02em",color:"var(--text)"}}>Rand00mscroll</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"8px",color:"var(--text4)",background:"var(--bg4)",border:"1px solid var(--border)",padding:"2px 6px",borderRadius:"4px"}}>v2</div>
-        </div>
-        <div style={{flex:1,display:"flex",justifyContent:"center"}}>
-          <div style={{position:"relative",width:"100%",maxWidth:"200px"}}>
-            <select value={tab} onChange={e=>setTab(e.target.value)} style={{width:"100%",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"8px 32px 8px 14px",color:"var(--text)",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
-              {TABS.map(t=><option key={t.id} value={t.id}>{t.label}{t.id==="engine"&&pendingBadge>0?" ("+pendingBadge+")":""}</option>)}
-            </select>
-            <div style={{position:"absolute",right:"12px",top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"#ADFF2F",fontSize:"11px"}}>▾</div>
-          </div>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
-          <button onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
-            style={{background:"var(--bg4)",border:"none",borderRadius:"20px",padding:"4px 10px",cursor:"pointer",fontSize:"14px",display:"flex",alignItems:"center",gap:"4px",transition:"all .2s"}}>
-            <span>{isDark?"☀️":"🌙"}</span>
-          </button>
-          <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
-            <span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":syncStatus==="syncing"?"#FF6B35":"#ADFF2F"}}>
-              {syncStatus==="syncing"?"SYNC":syncStatus==="synced"?"SYNCED":syncStatus==="saved"?"SAVED":"LIVE"}
-            </span>
-          </div>
+  return <div style={{minHeight:"100vh",background:"var(--bg)"}}>
+    <div style={{position:"sticky",top:0,zIndex:200,background:"var(--topbar)",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderBottom:"1px solid var(--border)",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"8px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+        <div style={{fontWeight:800,fontSize:"16px",letterSpacing:"-0.02em",color:"var(--text)"}}>Rand00mscroll</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"8px",color:"var(--text4)",background:"var(--bg4)",border:"1px solid var(--border)",padding:"2px 6px",borderRadius:"4px"}}>v2</div>
+      </div>
+      <div style={{flex:1,display:"flex",justifyContent:"center"}}>
+        <div style={{position:"relative",width:"100%",maxWidth:"200px"}}>
+          <select value={tab} onChange={e=>setTab(e.target.value)} style={{width:"100%",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"8px 32px 8px 14px",color:"var(--text)",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer",appearance:"none",WebkitAppearance:"none"}}>
+            {TABS.map(t=><option key={t.id} value={t.id}>{t.label}{t.id==="engine"&&pendingBadge>0?" ("+pendingBadge+")":""}</option>)}
+          </select>
+          <div style={{position:"absolute",right:"12px",top:"50%",transform:"translateY(-50%)",pointerEvents:"none",color:"#ADFF2F",fontSize:"11px"}}>▾</div>
         </div>
       </div>
-      <div style={{maxWidth:"860px",margin:"0 auto",padding:"24px 16px 80px",color:"var(--text)"}}>{VIEW[tab]}</div>
+      <div style={{display:"flex",alignItems:"center",gap:"8px",flexShrink:0}}>
+        <button onClick={()=>setTheme(t=>t==="dark"?"light":"dark")}
+          style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"20px",padding:"5px 10px",cursor:"pointer",fontSize:"14px",lineHeight:1,display:"flex",alignItems:"center"}}>
+          {theme==="dark"?"☀️":"🌙"}
+        </button>
+        <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
+          <span style={{fontFamily:"Space Mono",fontSize:"9px",color:syncStatus==="synced"||syncStatus==="saved"?"#ADFF2F":syncStatus==="syncing"?"#FF6B35":"#ADFF2F"}}>
+            {syncStatus==="syncing"?"SYNC":syncStatus==="synced"?"SYNCED":syncStatus==="saved"?"SAVED":"LIVE"}
+          </span>
+        </div>
+      </div>
     </div>
-  );
+    <div style={{maxWidth:"860px",margin:"0 auto",padding:"24px 16px 80px"}}>{VIEW[tab]}</div>
+  </div>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
