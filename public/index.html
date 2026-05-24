@@ -302,7 +302,76 @@ function ContentEngine({weeks,setWeeks,settings,onNavigate}){
   const [manifest,setManifest]=useState("");
   const [importErr,setImportErr]=useState("");
   const [importOk,setImportOk]=useState(false);
+  const [serverOnline,setServerOnline]=useState(false);
+  const [serverVideos,setServerVideos]=useState([]);
+  const [serverChecking,setServerChecking]=useState(false);
+  const [scheduling,setScheduling]=useState(false);
+  const [scheduleProgress,setScheduleProgress]=useState(0);
+  const [scheduleTotal,setScheduleTotal]=useState(0);
+  const [reviewVideo,setReviewVideo]=useState(null);
+  const [analysing,setAnalysing]=useState(false);
+  const [analysis,setAnalysis]=useState({});
   const activeWeek=weeks.find(w=>w.id===activeId)||workable[0];
+
+  const SERVER = "http://localhost:8765";
+
+  const checkServer = async () => {
+    setServerChecking(true);
+    try {
+      const r = await fetch(SERVER+"/ping", {signal: AbortSignal.timeout(3000)});
+      const d = await r.json();
+      if (d.ok) {
+        setServerOnline(true);
+        const vr = await fetch(SERVER+"/videos");
+        const videos = await vr.json();
+        setServerVideos(videos);
+      }
+    } catch {
+      setServerOnline(false);
+      setServerVideos([]);
+    }
+    setServerChecking(false);
+  };
+
+  const analyseVideo = async (video, prevWeekStats) => {
+    setAnalysing(true);
+    try {
+      const d = await claudeCall([{role:"user", content:
+        "You are a YouTube Shorts performance analyst.\n\nAnalyse this video and predict its performance compared to last week.\n\nVideo:\nTitle: "+video.title+"\nHook: "+video.hook+"\nContent Type: "+video.contentType+"\nTopic: "+video.topic+"\nPosting: "+video.day+" "+video.time+"\n\nLast week stats:\n"+JSON.stringify(prevWeekStats||{ctr:3.2,duration:45,avgViews:800})+"\n\nReturn ONLY valid JSON:\n{\"hookScore\":85,\"hookReason\":\"why this hook works\",\"ctрPrediction\":\"higher/similar/lower than last week\",\"retentionPrediction\":\"why viewers will/wont watch\",\"bestTime\":\"why this posting time works\",\"vsLastWeek\":\"specific reason this will outperform\",\"confidence\":72}"}],
+        {maxTokens:500}
+      );
+      const result = tryJSON(getText(d)) || {};
+      setAnalysis(prev => ({...prev, [video.jobId]: result}));
+    } catch(e) { console.error(e); }
+    setAnalysing(false);
+  };
+
+  const scheduleAll = async () => {
+    const unscheduled = serverVideos.filter(v => v.scheduleStatus !== "youtube_done" && v.hasVideo);
+    if (!unscheduled.length) return;
+    setScheduling(true);
+    setScheduleTotal(unscheduled.length);
+    setScheduleProgress(0);
+    try {
+      const r = await fetch(SERVER+"/schedule-all", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({})});
+      const d = await r.json();
+      setScheduleProgress(d.done||0);
+      // Refresh video list
+      const vr = await fetch(SERVER+"/videos");
+      setServerVideos(await vr.json());
+      // Update weeks state
+      if (d.results) {
+        setWeeks(prev => prev.map(w => {
+          if (w.id !== activeWeek?.id) return w;
+          return {...w, slots: w.slots.map(s => {
+            const res = d.results.find(r => r.jobId === s.id);
+            return res && res.success ? {...s, scheduleStatus:"youtube_done"} : s;
+          })};
+        }));
+      }
+    } catch(e) { console.error(e); }
+    setScheduling(false);
+  };
   const updateSlot=(wid,sid,up)=>setWeeks(prev=>prev.map(w=>w.id===wid?{...w,slots:w.slots.map(s=>s.id===sid?{...s,...up}:s)}:w));
   const generateAll=async()=>{
     if(!activeWeek||!activeWeek.slots)return;
@@ -387,6 +456,108 @@ function ContentEngine({weeks,setWeeks,settings,onNavigate}){
         {importErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px"}}>{importErr}</div>}
         <div style={{display:"flex",gap:"8px"}}><Btn small onClick={doImport}>Import and Sync</Btn><Btn small variant="ghost" onClick={()=>{setShowImport(false);setManifest("");setImportErr("");}}>Cancel</Btn></div>
       </div>}
+    </div>
+
+    {/* Review & Schedule Panel */}
+    <div style={{background:"var(--card)",border:"1px solid "+(serverOnline?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:"12px",padding:"18px",transition:"border .3s"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px",flexWrap:"wrap",gap:"10px"}}>
+        <div>
+          <SL color={serverOnline?"#ADFF2F":undefined}>REVIEW AND SCHEDULE</SL>
+          <p style={{fontSize:"12px",color:"var(--text3)"}}>
+            {serverOnline
+              ? serverVideos.length+" videos ready · "+serverVideos.filter(v=>v.scheduleStatus==="youtube_done").length+" already scheduled"
+              : "Start server.py on your laptop to preview and schedule videos"}
+          </p>
+        </div>
+        <div style={{display:"flex",gap:"8px",flexWrap:"wrap",alignItems:"center"}}>
+          {serverOnline&&!scheduling&&serverVideos.filter(v=>v.scheduleStatus!=="youtube_done"&&v.hasVideo).length>0&&
+            <Btn onClick={scheduleAll}>
+              {"Schedule All "+serverVideos.filter(v=>v.scheduleStatus!=="youtube_done"&&v.hasVideo).length+" Videos →"}
+            </Btn>
+          }
+          {scheduling&&<div style={{display:"flex",alignItems:"center",gap:"8px",background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"8px 14px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>Uploading {scheduleProgress}/{scheduleTotal}...</span></div>}
+          <Btn variant={serverOnline?"ghost":"outline"} small onClick={checkServer} disabled={serverChecking}>
+            {serverChecking?<><Spinner size={12}/>Checking...</>:serverOnline?"↻ Refresh":"Connect to Server"}
+          </Btn>
+        </div>
+      </div>
+
+      {!serverOnline&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"14px"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO CONNECT</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",lineHeight:2}}>
+          <div>1. Run the pipeline: <span style={{color:"#00CFFF"}}>python video_pipeline.py --jobs weekX_jobs.json</span></div>
+          <div>2. Then start the server: <span style={{color:"#00CFFF"}}>python server.py</span></div>
+          <div>3. Keep both running → tap Connect to Server above</div>
+        </div>
+      </div>}
+
+      {serverOnline&&serverVideos.length>0&&<div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+        {serverVideos.map(video=>{
+          const a=analysis[video.jobId];
+          const ct=CTYPES.find(t=>t.id===video.contentType);
+          const isScheduled=video.scheduleStatus==="youtube_done";
+          return <div key={video.jobId} style={{background:"var(--bg3)",border:"1px solid "+(isScheduled?"rgba(173,255,47,0.2)":reviewVideo===video.jobId?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:"12px",overflow:"hidden",transition:"border .2s"}}>
+            {/* Video header */}
+            <div style={{display:"flex",gap:"12px",padding:"12px",alignItems:"flex-start"}}>
+              {/* Thumbnail */}
+              <div style={{width:80,height:56,borderRadius:"8px",overflow:"hidden",background:"var(--bg4)",flexShrink:0,cursor:"pointer",position:"relative"}}
+                onClick={()=>setReviewVideo(reviewVideo===video.jobId?null:video.jobId)}>
+                {video.hasThumb?<img src={video.thumbUrl} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<div style={{width:"100%",height:"100%",display:"flex",alignItems:"center",justifyContent:"center",color:"var(--text4)",fontSize:"11px"}}>no thumb</div>}
+                <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",background:"rgba(0,0,0,0.3)",opacity:reviewVideo===video.jobId?0:1,transition:"opacity .2s"}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(255,255,255,0.9)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"9px",color:"#111"}}>▶</div>
+                </div>
+              </div>
+              {/* Info */}
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:"13px",fontWeight:700,color:"var(--text)",marginBottom:"3px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{video.title||"Untitled"}</div>
+                <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginBottom:"6px"}}>
+                  {ct&&<Tag color={ct.color}>{ct.label}</Tag>}
+                  <Tag color="var(--text4)">{video.day} {video.time}</Tag>
+                  {isScheduled&&<Tag color="#ADFF2F">✓ Scheduled</Tag>}
+                </div>
+                <div style={{fontSize:"12px",color:"var(--text4)",fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>"{video.hook}"</div>
+              </div>
+              {/* Analyse button */}
+              {!isScheduled&&<button onClick={()=>analyseVideo(video,null)}
+                style={{background:"var(--bg4)",border:"1px solid var(--border)",color:"var(--text3)",padding:"5px 10px",borderRadius:"6px",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer",flexShrink:0}}>
+                {analysing&&!a?"...":"Analyse"}
+              </button>}
+            </div>
+
+            {/* Video player (expanded) */}
+            {reviewVideo===video.jobId&&video.hasVideo&&<div style={{padding:"0 12px 12px"}}>
+              <video src={video.videoUrl} controls style={{width:"100%",borderRadius:"8px",maxHeight:"320px",background:"#000"}}/>
+            </div>}
+
+            {/* AI Analysis */}
+            {a&&<div style={{margin:"0 12px 12px",background:"var(--bg4)",border:"1px solid rgba(0,207,255,0.15)",borderRadius:"10px",padding:"12px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"10px"}}>
+                <div style={{width:20,height:20,borderRadius:"50%",background:"rgba(0,207,255,0.1)",border:"1px solid rgba(0,207,255,0.3)",display:"flex",alignItems:"center",justifyContent:"center",color:"#00CFFF",fontSize:"10px"}}>◈</div>
+                <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#00CFFF"}}>AI PERFORMANCE ANALYSIS</span>
+                <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginLeft:"auto"}}>CONFIDENCE {a.confidence||"—"}%</span>
+              </div>
+              <div style={{display:"flex",gap:"8px",flexWrap:"wrap",marginBottom:"10px"}}>
+                <div style={{flex:1,minWidth:"120px",background:"var(--bg3)",borderRadius:"8px",padding:"8px 10px"}}>
+                  <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>HOOK SCORE</div>
+                  <div style={{fontFamily:"Space Mono",fontSize:"18px",fontWeight:700,color:a.hookScore>80?"#ADFF2F":a.hookScore>60?"#FF6B35":"#FF2D6B"}}>{a.hookScore||"—"}</div>
+                </div>
+                <div style={{flex:1,minWidth:"120px",background:"var(--bg3)",borderRadius:"8px",padding:"8px 10px"}}>
+                  <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>CTR vs LAST WEEK</div>
+                  <div style={{fontFamily:"Space Mono",fontSize:"13px",fontWeight:700,color:a["ctрPrediction"]?.includes("higher")?"#ADFF2F":a["ctрPrediction"]?.includes("lower")?"#FF2D6B":"#FF6B35"}}>{a["ctрPrediction"]||"—"}</div>
+                </div>
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
+                {a.hookReason&&<div style={{fontSize:"12px",color:"var(--text2)",lineHeight:1.6}}><span style={{color:"#ADFF2F",fontWeight:700}}>Hook: </span>{a.hookReason}</div>}
+                {a.vsLastWeek&&<div style={{fontSize:"12px",color:"var(--text2)",lineHeight:1.6,background:"rgba(173,255,47,0.05)",borderRadius:"6px",padding:"8px 10px",borderLeft:"3px solid rgba(173,255,47,0.3)"}}><span style={{color:"#ADFF2F",fontWeight:700}}>vs Last Week: </span>{a.vsLastWeek}</div>}
+                {a.retentionPrediction&&<div style={{fontSize:"12px",color:"var(--text2)",lineHeight:1.6}}><span style={{color:"#00CFFF",fontWeight:700}}>Retention: </span>{a.retentionPrediction}</div>}
+                {a.bestTime&&<div style={{fontSize:"12px",color:"var(--text2)",lineHeight:1.6}}><span style={{color:"#B06EF3",fontWeight:700}}>Timing: </span>{a.bestTime}</div>}
+              </div>
+            </div>}
+          </div>;
+        })}
+      </div>}
+
+      {serverOnline&&serverVideos.length===0&&<div style={{padding:"20px",textAlign:"center",color:"var(--text4)",fontFamily:"Space Mono",fontSize:"11px"}}>No videos found in output_videos/ — run the pipeline first</div>}
     </div>
 
     {/* Slot list */}
