@@ -108,6 +108,27 @@ async function pexelsSearch(keyword, apiKey){
   try{const r=await fetch("https://api.pexels.com/videos/search?query="+encodeURIComponent(keyword)+"&per_page=6&orientation=portrait",{headers:{Authorization:apiKey}});const d=await r.json();return(d.videos||[]).map(v=>({id:v.id,preview:v.image,url:(v.video_files||[]).find(f=>f.quality==="sd")?.link||(v.video_files||[])[0]?.link,duration:v.duration}));}catch{return[];}
 }
 
+// Visual keyword pools — unique footage per content type
+const FOOTAGE_POOLS = {
+  cliffhanger: ["suspense dark corridor","mystery shadow person","tense dramatic face","night city thriller","countdown stress timer","secret door reveal"],
+  ragebait:    ["angry crowd street","shocking news breaking","frustrated reaction close","controversy heated debate","protest signs crowd","viral outrage moment"],
+  clickbait:   ["money cash success luxury","secret hidden treasure","amazing transformation before","shocking discovery moment","viral celebrity life","wealth lifestyle car"],
+  explanatory: ["whiteboard marker writing","professional explaining desk","office team meeting","data charts screen","teacher classroom clear","expert interview studio"],
+  infographic: ["data visualization display","statistics clean minimal","digital interface tech","information screen modern","flat design elements","analytics dashboard glow"],
+  brainrot:    ["neon lights city energy","gaming setup rgb glow","fast cut chaos street","zoom dramatic reaction","loud crowd festival","viral dance trend"],
+  engaging:    ["person talking direct camera","authentic outdoor candid","real conversation coffee","street interview spontaneous","genuine laugh natural","casual storytelling home"],
+  storytime:   ["nostalgic memory soft light","old photograph album","walking alone reflection road","emotional sunset silhouette","personal journey nature","past flashback blur"],
+};
+
+// Generate unique keyword per slot using content type + topic context + position
+function slotKeyword(slot, indexInTopic) {
+  const pool = FOOTAGE_POOLS[slot.contentType] || FOOTAGE_POOLS.engaging;
+  const base = pool[indexInTopic % pool.length];
+  // Add 1-2 meaningful topic words for visual context
+  const topicWords = (slot.topic||"").split(" ").filter(w=>w.length>4).slice(0,2).join(" ");
+  return topicWords ? base+" "+topicWords : base;
+}
+
 // ── YouTube Analytics ─────────────────────────────────────────
 async function fetchYTAnalytics(token, startDate, endDate){
   const url="https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate="+startDate+"&endDate="+endDate+"&metrics=views,estimatedMinutesWatched,averageViewPercentage,subscribersGained,estimatedRevenue,impressionClickThroughRate&dimensions=video&sort=-views&maxResults=21";
@@ -262,14 +283,22 @@ function FootageStage({week,updateWeek,pexelsKey}){
   const slotsWithScript=slots.filter(s=>s.script);
   const slotsWithFootage=slots.filter(s=>s.footage&&s.footage.length>0);
   const fetchAll=async()=>{
+    // Track how many slots per topic we have processed — for keyword rotation
+    const topicCounts = {};
     for(const slot of slotsWithScript){
       if(slot.footage&&slot.footage.length>0) continue;
       setLoading(p=>({...p,[slot.id]:true}));
-      const kw=slot.script.topic||slot.topic;
-      const clips=await pexelsSearch(kw,pexelsKey);
-      setResults(p=>({...p,[slot.id]:clips}));
-      if(clips.length>0){
-        const updated=week.slots.map(s=>s.id===slot.id?{...s,footage:clips}:s);
+      // Count position within this topic for keyword variety
+      const tk = slot.topic||"general";
+      topicCounts[tk] = (topicCounts[tk]||0);
+      const kw = slotKeyword(slot, topicCounts[tk]);
+      topicCounts[tk]++;
+      const clips = await pexelsSearch(kw, pexelsKey);
+      // Fallback to broader topic search if no results
+      const finalClips = clips.length > 0 ? clips : await pexelsSearch(slot.topic||"nature", pexelsKey);
+      setResults(p=>({...p,[slot.id]:finalClips}));
+      if(finalClips.length>0){
+        const updated=week.slots.map(s=>s.id===slot.id?{...s,footage:finalClips}:s);
         updateWeek({slots:updated});
       }
       setLoading(p=>({...p,[slot.id]:false}));
@@ -287,10 +316,13 @@ function FootageStage({week,updateWeek,pexelsKey}){
         const clips=results[slot.id]||slot.footage||[];
         const selected=slot.footage&&slot.footage[0];
         return <div key={slot.id} style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"8px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"6px"}}>
             <div style={{fontSize:"12px",fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script.title}</div>
             {loading[slot.id]&&<Spinner size={12}/>}
             {selected&&<Tag color="#ADFF2F">✓</Tag>}
+          </div>
+          <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"8px"}}>
+            Search: {(()=>{const pool=FOOTAGE_POOLS[slot.contentType]||FOOTAGE_POOLS.engaging;const idx=slotsWithScript.indexOf(slot);const topicSlots=slotsWithScript.filter(s=>s.topic===slot.topic);const posInTopic=topicSlots.indexOf(slot);return slotKeyword(slot,posInTopic);})()}
           </div>
           {clips.length>0?<div style={{display:"flex",gap:"6px",overflowX:"auto"}}>
             {clips.slice(0,6).map((c,i)=><div key={i} onClick={()=>selectClip(slot.id,c)} style={{width:64,height:48,borderRadius:"6px",overflow:"hidden",flexShrink:0,cursor:"pointer",border:"2px solid "+(selected&&selected.id===c.id?"#ADFF2F":"transparent"),transition:"border .15s"}}>
