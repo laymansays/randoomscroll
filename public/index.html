@@ -7,19 +7,19 @@
 <title>Rand00mscroll</title>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
 :root{--bg:#F5F5F7;--bg2:#ffffff;--bg3:#f0f0f0;--bg4:#e8e8e8;--card:#ffffff;--card2:#f8f8f8;--border:#e0e0e0;--border2:#d0d0d0;--text:#111111;--text2:#333333;--text3:#666666;--text4:#999999;--topbar:rgba(245,245,247,0.96);--input-bg:#f5f5f7;--input-border:#e0e0e0;}
 body.dark{--bg:#08080E;--bg2:#111118;--bg3:#0A0A12;--bg4:#1A1A2A;--card:#111118;--card2:#0A0A12;--border:#1E1E2E;--border2:#2a2a3a;--text:#E8E8F0;--text2:#CCCCCC;--text3:#888888;--text4:#555555;--topbar:rgba(8,8,14,0.96);--input-bg:#0A0A12;--input-border:#1E1E2E;}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-tap-highlight-color:transparent}
-body{font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
+body{font-family:'Stardos Stencil','Arial Black',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;transition:background .2s,color .2s}
 @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(173,255,47,.4)}50%{box-shadow:0 0 0 8px rgba(173,255,47,0)}}
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .fade-up{animation:fadeUp 0.25s ease forwards}
-input,textarea,select{font-family:'Syne',sans-serif;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);border-radius:8px;}
+input,textarea,select{font-family:'Stardos Stencil','Arial Black',sans-serif;background:var(--input-bg);border:1px solid var(--input-border);color:var(--text);border-radius:8px;}
 input::placeholder,textarea::placeholder{color:var(--text4)}
 input:focus,textarea:focus,select:focus{outline:none;border-color:#ADFF2F!important}
 textarea{resize:vertical}
@@ -157,7 +157,7 @@ function SL({children,color}){return <div style={{fontFamily:"Space Mono",fontSi
 function Btn({children,onClick,disabled,variant,small,full}){
   const v=variant||"primary";
   const s={primary:{background:disabled?"var(--bg4)":"#ADFF2F",color:disabled?"var(--text4)":"#08080E",border:"none"},outline:{background:"transparent",color:"#ADFF2F",border:"1px solid rgba(173,255,47,0.4)"},danger:{background:"transparent",color:"#FF2D6B",border:"1px solid rgba(255,45,107,0.3)"},ghost:{background:"var(--card)",color:"var(--text3)",border:"1px solid var(--border)"},green:{background:"rgba(13,26,13,0.9)",color:"#ADFF2F",border:"1px solid rgba(173,255,47,0.3)"},orange:{background:"rgba(26,10,0,0.9)",color:"#FF6B35",border:"1px solid rgba(255,107,53,0.3)"}}[v]||{};
-  return <button onClick={onClick} disabled={disabled} style={{...s,fontFamily:"Syne",fontWeight:700,fontSize:small?"12px":"14px",padding:small?"6px 14px":"10px 22px",borderRadius:"8px",cursor:disabled?"not-allowed":"pointer",transition:"all .15s",width:full?"100%":undefined,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>{children}</button>;
+  return <button onClick={onClick} disabled={disabled} style={{...s,fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:small?"12px":"14px",padding:small?"6px 14px":"10px 22px",borderRadius:"8px",cursor:disabled?"not-allowed":"pointer",transition:"all .15s",width:full?"100%":undefined,display:"inline-flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>{children}</button>;
 }
 
 function StatBox({label,value,sub,accent,delta}){const a=accent||"#ADFF2F";return <div style={{flex:1,minWidth:"80px",background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"10px 12px"}}><div style={{fontFamily:"Space Mono",fontSize:"18px",fontWeight:700,color:a,lineHeight:1}}>{value}</div><div style={{fontSize:"11px",color:"var(--text3)",fontWeight:600,marginTop:"4px"}}>{label}</div>{sub&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginTop:"2px"}}>{sub}</div>}{delta&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:delta.startsWith("+")?"#ADFF2F":"#FF2D6B",marginTop:"2px"}}>{delta}</div>}</div>;}
@@ -221,7 +221,7 @@ function PlanStage({week,updateWeek}){
     </div>
     <div>
       <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"8px"}}>CONTENT TYPE MIX</div>
-      <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>{CTYPES.map(ct=><button key={ct.id} onClick={()=>toggleType(ct.id)} style={{background:selTypes.includes(ct.id)?ct.color+"22":"var(--card2)",border:"1px solid "+(selTypes.includes(ct.id)?ct.color:"var(--border)"),color:selTypes.includes(ct.id)?ct.color:"var(--text3)",padding:"5px 12px",borderRadius:"20px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",transition:"all .15s"}}>{ct.label}</button>)}</div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:"6px"}}>{CTYPES.map(ct=><button key={ct.id} onClick={()=>toggleType(ct.id)} style={{background:selTypes.includes(ct.id)?ct.color+"22":"var(--card2)",border:"1px solid "+(selTypes.includes(ct.id)?ct.color:"var(--border)"),color:selTypes.includes(ct.id)?ct.color:"var(--text3)",padding:"5px 12px",borderRadius:"20px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"12px",cursor:"pointer",transition:"all .15s"}}>{ct.label}</button>)}</div>
     </div>
     {canLock&&<div style={{background:"rgba(13,26,13,0.3)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:"8px",padding:"10px 12px",fontSize:"13px",color:"var(--text3)",lineHeight:1.8}}>
       <strong style={{color:"var(--text)"}}>Week {week.number}:</strong> {niche} · {validTopics(topics).join(" / ")} · {selTypes.length} formats · 21 videos
@@ -452,10 +452,10 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
         {modal.script&&modal.script.hook&&<div style={{fontSize:"13px",color:"#ADFF2F",fontStyle:"italic",marginBottom:"14px",padding:"10px 12px",background:"rgba(173,255,47,0.05)",borderRadius:"8px",borderLeft:"3px solid rgba(173,255,47,0.4)"}}>"{modal.script.hook}"</div>}
         {modal.videoUrl&&!generating[modal.id]&&<video src={modal.videoUrl} controls autoPlay style={{width:"100%",borderRadius:"10px",background:"#000",maxHeight:"400px",marginBottom:"14px"}}/>}
         {generating[modal.id]&&<div style={{marginBottom:"14px",background:"#0A0A12",borderRadius:"10px",height:"180px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"12px"}}><Spinner size={24}/><div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>Generating video...</div></div>}
-        {!modal.videoUrl&&!generating[modal.id]&&<div style={{marginBottom:"14px",background:"#0A0A12",borderRadius:"10px",padding:"16px",textAlign:"center"}}><div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#555",marginBottom:"12px"}}>Video not generated yet</div>{serverOnline&&<button onClick={e=>{e.stopPropagation();generateOne(modal);}} style={{background:"rgba(13,26,13,0.9)",border:"1px solid rgba(173,255,47,0.3)",color:"#ADFF2F",padding:"8px 20px",borderRadius:"8px",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer"}}>Generate This Video</button>}</div>}
+        {!modal.videoUrl&&!generating[modal.id]&&<div style={{marginBottom:"14px",background:"#0A0A12",borderRadius:"10px",padding:"16px",textAlign:"center"}}><div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#555",marginBottom:"12px"}}>Video not generated yet</div>{serverOnline&&<button onClick={e=>{e.stopPropagation();generateOne(modal);}} style={{background:"rgba(13,26,13,0.9)",border:"1px solid rgba(173,255,47,0.3)",color:"#ADFF2F",padding:"8px 20px",borderRadius:"8px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer"}}>Generate This Video</button>}</div>}
         {modal.script&&modal.script.script&&<div style={{marginBottom:"14px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",marginBottom:"6px",letterSpacing:"0.1em"}}>SCRIPT</div><div style={{fontSize:"13px",color:"#ccc",lineHeight:1.8,background:"#0A0A12",borderRadius:"8px",padding:"12px"}}>{modal.script.script}</div></div>}
         {modal.script&&modal.script.ytCaption&&<div style={{marginBottom:"14px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",marginBottom:"6px",letterSpacing:"0.1em"}}>CAPTION</div><div style={{fontSize:"12px",color:"#888",fontFamily:"Space Mono",background:"#0A0A12",borderRadius:"8px",padding:"10px"}}>{modal.script.ytCaption}</div></div>}
-        {modal.videoUrl&&!generating[modal.id]&&serverOnline&&<button onClick={e=>{e.stopPropagation();generateOne(modal);}} style={{background:"#1a1a2a",border:"1px solid #2a2a3a",color:"#888",padding:"7px 16px",borderRadius:"8px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>↺ Regenerate Video</button>}
+        {modal.videoUrl&&!generating[modal.id]&&serverOnline&&<button onClick={e=>{e.stopPropagation();generateOne(modal);}} style={{background:"#1a1a2a",border:"1px solid #2a2a3a",color:"#888",padding:"7px 16px",borderRadius:"8px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>↺ Regenerate Video</button>}
       </div>
     </div>}
   </div>;
@@ -677,8 +677,8 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
         <h2 style={{fontWeight:800,fontSize:"20px"}}>Setup</h2>
         <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
           {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
-          {onSync&&<button onClick={()=>onSync(local)} style={{background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"13px",color:"#ADFF2F"}}>↓ Sync Now</button>}
-          <button onClick={onClose} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"13px",color:"var(--text)"}}>Done</button>
+          {onSync&&<button onClick={()=>onSync(local)} style={{background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",color:"#ADFF2F"}}>↓ Sync Now</button>}
+          <button onClick={onClose} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",color:"var(--text)"}}>Done</button>
         </div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
@@ -831,14 +831,14 @@ function App(){
           const isActive=activeTab==="w"+i;
           const hasDot=w.locked;
           const dotColor=w.scheduled&&w.analytics?"#ADFF2F":w.scheduled?"#FF6B35":w.locked?"#00CFFF":"var(--border2)";
-          return <button key={w.id} onClick={()=>setActiveTab("w"+i)} style={{background:isActive?"#ADFF2F":"var(--bg4)",color:isActive?"#08080E":"var(--text3)",border:"1px solid "+(isActive?"#ADFF2F":"var(--border)"),borderRadius:"8px",padding:"5px 10px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,display:"flex",alignItems:"center",gap:"5px",transition:"all .15s"}}>
+          return <button key={w.id} onClick={()=>setActiveTab("w"+i)} style={{background:isActive?"#ADFF2F":"var(--bg4)",color:isActive?"#08080E":"var(--text3)",border:"1px solid "+(isActive?"#ADFF2F":"var(--border)"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"12px",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,display:"flex",alignItems:"center",gap:"5px",transition:"all .15s"}}>
             {hasDot&&<div style={{width:5,height:5,borderRadius:"50%",background:isActive?"#08080E":dotColor,flexShrink:0}}/>}
             W{i+1}{w.niche?" · "+w.niche.slice(0,10):""}
           </button>;
         })}
-        <button onClick={addWeek} style={{background:"transparent",border:"1px dashed var(--border)",borderRadius:"8px",padding:"5px 10px",color:"var(--text4)",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer",flexShrink:0}}>+ Week</button>
+        <button onClick={addWeek} style={{background:"transparent",border:"1px dashed var(--border)",borderRadius:"8px",padding:"5px 10px",color:"var(--text4)",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"12px",cursor:"pointer",flexShrink:0}}>+ Week</button>
         <div style={{width:"1px",background:"var(--border)",margin:"0 2px",flexShrink:0}}/>
-        {[["month","Month"],["quarter","Quarter"],["year","Year"]].map(([id,label])=><button key={id} onClick={()=>setActiveTab(id)} style={{background:activeTab===id?"var(--bg4)":"transparent",color:activeTab===id?"var(--text)":"var(--text4)",border:"1px solid "+(activeTab===id?"var(--border)":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"Syne",fontWeight:600,fontSize:"11px",cursor:"pointer",flexShrink:0}}>{label}</button>)}
+        {[["month","Month"],["quarter","Quarter"],["year","Year"]].map(([id,label])=><button key={id} onClick={()=>setActiveTab(id)} style={{background:activeTab===id?"var(--bg4)":"transparent",color:activeTab===id?"var(--text)":"var(--text4)",border:"1px solid "+(activeTab===id?"var(--border)":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:600,fontSize:"11px",cursor:"pointer",flexShrink:0}}>{label}</button>)}
       </div>
       {/* Right controls */}
       <div style={{display:"flex",gap:"5px",alignItems:"center",flexShrink:0}}>
