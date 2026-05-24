@@ -75,7 +75,11 @@ async function sbSave(url,key,ch,p){if(!url||!key||!ch)return;try{await fetch(ur
 // ── Claude API ────────────────────────────────────────────────
 async function claudeCall(msgs,opts){
   const body={model:"claude-sonnet-4-20250514",max_tokens:(opts&&opts.maxTokens)||1000,messages:msgs};
-  const r=await fetch("/api/claude",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+  // Use Vercel proxy when on localhost, relative path when on Vercel
+  const apiUrl = (window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1")
+    ? "https://randoomscroll.vercel.app/api/claude"
+    : "/api/claude";
+  const r=await fetch(apiUrl,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
   if(!r.ok) throw new Error("Claude "+r.status);
   return r.json();
 }
@@ -379,7 +383,7 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px"}}>
       <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>{withVideo.length}/21 videos generated</div>
       <div style={{display:"flex",gap:"8px"}}>
-        <Btn small variant={serverOnline?"green":"outline"} onClick={onCheckServer}>{serverOnline?"● Server Online":IS_LOCAL?"Checking...":"Open http://localhost:8765"}</Btn>
+        <Btn small variant={serverOnline?"green":"outline"} onClick={onCheckServer}>{serverOnline?"● Server Online":IS_LOCAL?"Checking...":"Open http://localhost:8080"}</Btn>
         {serverOnline&&<Btn small onClick={generateAll} disabled={withScript.length===0}>Generate All Videos</Btn>}
       </div>
     </div>
@@ -390,7 +394,7 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
         <div>2. Move it to your <span style={{color:"#00CFFF"}}>rand00mscroll_pipeline</span> folder</div>
         <div>3. Run: <span style={{color:"#00CFFF"}}>python video_pipeline.py --jobs weekX_jobs.json --no-upload</span></div>
         <div>4. Run: <span style={{color:"#00CFFF"}}>python server.py</span></div>
-        <div>5. <strong style={{color:"#ADFF2F"}}>Open http://localhost:8765 in your browser</strong></div>
+        <div>5. <strong style={{color:"#ADFF2F"}}>Open http://localhost:8080 in your browser</strong></div>
         <div style={{color:"var(--text3)",fontSize:"10px"}}>The app reloads from localhost — server connects automatically.</div>
       </div>
     </div>}
