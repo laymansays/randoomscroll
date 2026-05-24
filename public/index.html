@@ -525,7 +525,50 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
   const doSchedule=async()=>{
     if(!serverOnline){onCheckServer();return;}
     setScheduling(true);setSchedProg(0);
-    try{const r=await scheduleAllVideos(week.id);setSchedProg(r.done||0);updateWeek({scheduled:true,scheduledAt:new Date().toISOString(),slots:week.slots.map(s=>{const res=(r.results||[]).find(x=>x.jobId===s.id);return res&&res.success?{...s,scheduleStatus:"youtube_done"}:s;})});}catch(e){console.error(e);}
+
+    const totalSlots = week.slots.filter(s=>s.videoUrl||s.status==="pending"||!s.videoUrl);
+    let scheduled = 0;
+    const POLL_INTERVAL = 15000; // check every 15 seconds for new videos
+    const MAX_WAIT = 90 * 60 * 1000; // max 90 min total
+    const startTime = Date.now();
+
+    const uploadPending = async () => {
+      try {
+        const r = await scheduleAllVideos(week.id);
+        scheduled += (r.done||0);
+        setSchedProg(scheduled);
+        updateWeek({slots:week.slots.map(s=>{
+          const res=(r.results||[]).find(x=>x.jobId===s.id);
+          return res&&res.success?{...s,scheduleStatus:"youtube_done"}:s;
+        })});
+        return r.done||0;
+      } catch(e){ console.error(e); return 0; }
+    };
+
+    // Upload whatever is ready now
+    await uploadPending();
+
+    // Keep polling for newly generated videos
+    const unscheduled = ()=>week.slots.filter(s=>!s.videoUrl&&s.scheduleStatus!=="youtube_done").length;
+    while(unscheduled()>0 && Date.now()-startTime < MAX_WAIT){
+      await new Promise(r=>setTimeout(r,POLL_INTERVAL));
+      // Refresh video list from server
+      try {
+        const vr = await fetch(SERVER+"/videos");
+        const videos = await vr.json();
+        const updated = week.slots.map(s=>{
+          const sv = videos.find(v=>v.jobId===s.id);
+          return sv&&sv.hasVideo&&!s.videoUrl?{...s,videoUrl:SERVER+"/file/"+s.id+".mp4"}:s;
+        });
+        updateWeek({slots:updated});
+      } catch{}
+      // Upload any newly ready videos
+      await uploadPending();
+    }
+
+    // Mark week as fully scheduled if all done
+    const allDone = week.slots.every(s=>s.scheduleStatus==="youtube_done");
+    if(allDone) updateWeek({scheduled:true,scheduledAt:new Date().toISOString()});
     setScheduling(false);
   };
 
@@ -572,7 +615,16 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
             updateWeek({slots:shuffled});
           }}>⇄ Shuffle Schedule</Btn>
           <Btn small variant="ghost" onClick={exportJobs}>↓ Export Jobs</Btn>
-          {scheduled.length<21&&(scheduling?<div style={{display:"flex",alignItems:"center",gap:"6px",padding:"6px 12px",background:"var(--bg3)",borderRadius:"8px"}}><Spinner size={11}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{schedProg}/{withVideo.length}</span></div>:<Btn onClick={doSchedule} disabled={withVideo.length===0}>{withVideo.length?"Schedule "+withVideo.length+" Videos →":"Generate Videos First"}</Btn>)}
+          {scheduled.length<21&&(scheduling
+          ?<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 14px",background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px"}}>
+              <Spinner size={11}/>
+              <div>
+                <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{schedProg} uploaded · watching for more...</div>
+                <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#555",marginTop:"2px"}}>uploads each video as it finishes generating</div>
+              </div>
+            </div>
+          :<Btn onClick={doSchedule} disabled={withVideo.length===0}>{withVideo.length?"Schedule "+withVideo.length+" Videos →":"Generate Videos First"}</Btn>
+        )}
           {scheduled.length===21&&<div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>LIVE ON YOUTUBE</span></div>}
         </div>
       </div>
