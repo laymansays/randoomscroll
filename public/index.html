@@ -265,7 +265,7 @@ function ScriptsStage({week,updateWeek}){
               <div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 10px",cursor:slot.script?"pointer":"default"}} onClick={()=>slot.script&&setExpanded(expanded===slot.id?null:slot.id)}>
                 <div style={{width:5,height:5,borderRadius:"50%",background:slot.script?"#ADFF2F":"var(--border2)",flexShrink:0}}/>
                 <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",width:"44px",flexShrink:0}}>{TIMES[slot.time]}</div>
-                <div style={{flex:1,fontSize:"12px",color:slot.script?"var(--text)":"var(--text4)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:slot.topic}</div>
+                <div style={{flex:1,fontSize:"12px",color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:(slot.topic||"Waiting...")}</div>
                 {ct&&<Tag color={ct.color}>{ct.label}</Tag>}
               </div>
               {expanded===slot.id&&slot.script&&<div style={{padding:"0 10px 10px",borderTop:"1px solid var(--border)"}}>
@@ -402,10 +402,10 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
       {withScript.map(slot=>{
         const ct=CTYPES.find(c=>c.id===slot.contentType);
         const isActive=activePreview===slot.id;
-        return <div key={slot.id} style={{background:"var(--card2)",border:"1px solid "+(slot.videoUrl?"rgba(173,255,47,0.2)":isActive?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:"10px",overflow:"hidden"}}>
+        return <div key={slot.id} style={{background:"var(--card)",border:"1px solid "+(slot.videoUrl?"rgba(173,255,47,0.2)":isActive?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:"10px",overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px"}}>
             <div style={{width:5,height:5,borderRadius:"50%",background:slot.videoUrl?"#ADFF2F":"var(--border2)",flexShrink:0}}/>
-            <div style={{flex:1,fontSize:"13px",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script.title}</div>
+            <div style={{flex:1,fontSize:"13px",fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{slot.script.title}</div>
             <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",flexShrink:0}}>{DAYS[slot.day]} {TIMES[slot.time]}</div>
             {ct&&<Tag color={ct.color}>{ct.label}</Tag>}
             {slot.videoUrl&&<button onClick={()=>setActivePreview(isActive?null:slot.id)} style={{background:"var(--bg4)",border:"1px solid var(--border)",color:isActive?"#ADFF2F":"var(--text3)",padding:"4px 10px",borderRadius:"6px",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer"}}>{isActive?"Hide":"▶ Preview"}</button>}
@@ -627,7 +627,7 @@ function WeekWorkspace({week,updateWeek,settings,ytToken,connectYT,serverOnline,
 }
 
 // ── Setup Overlay ─────────────────────────────────────────────
-function SetupOverlay({settings,setSettings,onClose}){
+function SetupOverlay({settings,setSettings,onClose,onSync}){
   const [local,setLocal]=useState({...settings});
   const [flash,setFlash]=useState(false);
   const set=(k,v)=>{const u={...local,[k]:v};setLocal(u);setSettings(u);setFlash(true);setTimeout(()=>setFlash(false),1500);};
@@ -636,7 +636,11 @@ function SetupOverlay({settings,setSettings,onClose}){
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"16px",width:"100%",maxWidth:"540px",padding:"20px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
         <h2 style={{fontWeight:800,fontSize:"20px"}}>Setup</h2>
-        <div style={{display:"flex",gap:"10px",alignItems:"center"}}>{flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}<button onClick={onClose} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"13px",color:"var(--text)"}}>Done</button></div>
+        <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+          {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
+          {onSync&&<button onClick={()=>onSync(local)} style={{background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"13px",color:"#ADFF2F"}}>↓ Sync Now</button>}
+          <button onClick={onClose} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"13px",color:"var(--text)"}}>Done</button>
+        </div>
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
         {/* Buffer */}
@@ -713,11 +717,33 @@ function App(){
   // Theme
   useEffect(()=>{document.body.className=theme;try{localStorage.setItem("r00m_theme",theme);}catch{};},[theme]);
 
+  // Manual sync — works even when credentials entered after load
+  const syncFromSupabase = async (s) => {
+    const cfg = s || settings;
+    const {supabaseUrl,supabaseKey,channelKey} = cfg;
+    if(!supabaseUrl||!supabaseKey||!channelKey) return;
+    setSyncStatus("syncing");
+    try {
+      const data = await sbLoad(supabaseUrl,supabaseKey,channelKey);
+      if(data&&data.weeks) setWeeksRaw(data.weeks);
+      if(data&&data.settings) setSettingsRaw(prev=>({...data.settings,supabaseUrl:prev.supabaseUrl,supabaseKey:prev.supabaseKey,channelKey:prev.channelKey}));
+      setSyncStatus("synced");
+    } catch(e) { setSyncStatus("error"); }
+    setSbReady(true);
+  };
+
   // Supabase
   useEffect(()=>{
     const {supabaseUrl,supabaseKey,channelKey}=settings;
     if(supabaseUrl&&supabaseKey&&channelKey){
-      setSyncStatus("syncing");
+      syncFromSupabase(settings);
+    } else { setSbReady(true); }
+    // eslint-disable-next-line
+  },[]);
+
+  useEffect(()=>{ // dummy to satisfy linter
+    const {supabaseUrl,supabaseKey,channelKey}=settings;
+    if(supabaseUrl&&supabaseKey&&channelKey){
       sbLoad(supabaseUrl,supabaseKey,channelKey).then(data=>{
         if(data&&data.weeks){setWeeksRaw(data.weeks);}
         setSyncStatus("synced");setSbReady(true);
@@ -808,7 +834,7 @@ function App(){
     </div>
 
     {/* Setup overlay */}
-    {showSetup&&<SetupOverlay settings={settings} setSettings={setSettings} onClose={()=>setShowSetup(false)}/>}
+    {showSetup&&<SetupOverlay settings={settings} setSettings={setSettings} onClose={()=>setShowSetup(false)} onSync={syncFromSupabase}/>}
   </div>;
 }
 
