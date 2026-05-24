@@ -378,7 +378,16 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
     }catch(e){console.error(e);}
     setGenerating(p=>({...p,[slot.id]:false}));
   };
-  const generateAll=async()=>{for(const s of withScript){if(!s.videoUrl)await generateOne(s);}};
+  const generateAll=async()=>{
+    // Process strictly one at a time — server can only generate one video at a time
+    const toGenerate = withScript.filter(s=>!s.videoUrl);
+    for(let i=0;i<toGenerate.length;i++){
+      const slot = toGenerate[i];
+      await generateOne(slot);
+      // Small pause between requests
+      await new Promise(r=>setTimeout(r,500));
+    }
+  };
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px"}}>
       <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>{withVideo.length}/21 videos generated</div>
