@@ -363,6 +363,7 @@ function FootageStage({week,updateWeek,pexelsKey}){
 function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
   const [generating,setGenerating]=useState({});
   const [activePreview,setActivePreview]=useState(null);
+  const [modal,setModal]=useState(null); // slot object shown in floating modal
   const slots=week.slots||[];
   const withScript=slots.filter(s=>s.script);
   const withVideo=slots.filter(s=>s.videoUrl);
@@ -423,23 +424,40 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
       {withScript.map(slot=>{
         const ct=CTYPES.find(c=>c.id===slot.contentType);
         const isActive=activePreview===slot.id;
-        return <div key={slot.id} style={{background:"#1a1a2a",border:"2px solid "+(generating[slot.id]?"#ADFF2F":slot.videoUrl?"rgba(173,255,47,0.3)":"#2a2a3a"),borderRadius:"10px",overflow:"hidden",marginBottom:"2px"}}>
+        return <div key={slot.id}
+          onClick={()=>setModal(slot)}
+          style={{background:"#1a1a2a",border:"2px solid "+(generating[slot.id]?"#ADFF2F":slot.videoUrl?"rgba(173,255,47,0.3)":"#2a2a3a"),borderRadius:"10px",overflow:"hidden",marginBottom:"2px",cursor:"pointer",transition:"border .2s"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px"}}>
             <div style={{width:7,height:7,borderRadius:"50%",background:generating[slot.id]?"#ADFF2F":slot.videoUrl?"#ADFF2F":"#555",flexShrink:0,...(generating[slot.id]?{animation:"pulse 1s infinite"}:{})}}/>
             <div style={{flex:1,fontSize:"13px",fontWeight:600,color:"#ffffff",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{slot.script.title}</div>
             <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#888",flexShrink:0}}>{DAYS[slot.day]} {TIMES[slot.time]}</div>
             {ct&&<Tag color={ct.color}>{ct.label}</Tag>}
-            {slot.videoUrl&&<button onClick={()=>setActivePreview(isActive?null:slot.id)} style={{background:"var(--bg4)",border:"1px solid var(--border)",color:isActive?"#ADFF2F":"var(--text3)",padding:"4px 10px",borderRadius:"6px",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer"}}>{isActive?"Hide":"▶ Preview"}</button>}
-            {serverOnline&&!generating[slot.id]&&<button onClick={()=>generateOne(slot)} style={{background:slot.videoUrl?"var(--bg3)":"rgba(13,26,13,0.8)",border:"1px solid "+(slot.videoUrl?"var(--border)":"rgba(173,255,47,0.3)"),color:slot.videoUrl?"var(--text4)":"#ADFF2F",padding:"4px 10px",borderRadius:"6px",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer"}}>{slot.videoUrl?"Regenerate":"Generate"}</button>}
-            {generating[slot.id]&&<Spinner size={12}/>}
+            {generating[slot.id]?<Spinner size={12}/>:<span style={{fontFamily:"Space Mono",fontSize:"10px",color:slot.videoUrl?"#ADFF2F":"#555"}}>{slot.videoUrl?"▶ Preview":"click"}</span>}
           </div>
-          {isActive&&slot.videoUrl&&<div style={{padding:"0 12px 12px"}}>
-            <video src={slot.videoUrl} controls style={{width:"100%",borderRadius:"8px",maxHeight:"360px",background:"#000"}}/>
-            <div style={{fontSize:"12px",color:"#ADFF2F",fontStyle:"italic",marginTop:"8px"}}>"{slot.script.hook}"</div>
-          </div>}
         </div>;
       })}
     </div>
+
+    {/* Floating preview modal */}
+    {modal&&<div onClick={()=>setModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#111118",border:"1px solid #2a2a3a",borderRadius:"16px",width:"100%",maxWidth:"560px",maxHeight:"90vh",overflowY:"auto",padding:"20px",position:"relative"}}>
+        <button onClick={()=>setModal(null)} style={{position:"absolute",top:"14px",right:"14px",background:"#2a2a3a",border:"none",borderRadius:"50%",width:28,height:28,cursor:"pointer",color:"#888",fontSize:"14px",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"14px",paddingRight:"32px"}}>
+          {(()=>{const ct=CTYPES.find(c=>c.id===modal.contentType);return ct?<Tag color={ct.color}>{ct.label}</Tag>:null;})()}
+          <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#888"}}>{DAYS[modal.day]} {TIMES[modal.time]}</span>
+          {modal.videoUrl&&!generating[modal.id]&&<span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginLeft:"auto"}}>● Video Ready</span>}
+          {generating[modal.id]&&<span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginLeft:"auto"}}>● Generating...</span>}
+        </div>
+        <div style={{fontSize:"18px",fontWeight:800,color:"#ffffff",marginBottom:"8px",lineHeight:1.3}}>{modal.script&&modal.script.title}</div>
+        {modal.script&&modal.script.hook&&<div style={{fontSize:"13px",color:"#ADFF2F",fontStyle:"italic",marginBottom:"14px",padding:"10px 12px",background:"rgba(173,255,47,0.05)",borderRadius:"8px",borderLeft:"3px solid rgba(173,255,47,0.4)"}}>"{modal.script.hook}"</div>}
+        {modal.videoUrl&&!generating[modal.id]&&<video src={modal.videoUrl} controls autoPlay style={{width:"100%",borderRadius:"10px",background:"#000",maxHeight:"400px",marginBottom:"14px"}}/>}
+        {generating[modal.id]&&<div style={{marginBottom:"14px",background:"#0A0A12",borderRadius:"10px",height:"180px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"12px"}}><Spinner size={24}/><div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>Generating video...</div></div>}
+        {!modal.videoUrl&&!generating[modal.id]&&<div style={{marginBottom:"14px",background:"#0A0A12",borderRadius:"10px",padding:"16px",textAlign:"center"}}><div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#555",marginBottom:"12px"}}>Video not generated yet</div>{serverOnline&&<button onClick={e=>{e.stopPropagation();generateOne(modal);}} style={{background:"rgba(13,26,13,0.9)",border:"1px solid rgba(173,255,47,0.3)",color:"#ADFF2F",padding:"8px 20px",borderRadius:"8px",fontFamily:"Syne",fontWeight:700,fontSize:"13px",cursor:"pointer"}}>Generate This Video</button>}</div>}
+        {modal.script&&modal.script.script&&<div style={{marginBottom:"14px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",marginBottom:"6px",letterSpacing:"0.1em"}}>SCRIPT</div><div style={{fontSize:"13px",color:"#ccc",lineHeight:1.8,background:"#0A0A12",borderRadius:"8px",padding:"12px"}}>{modal.script.script}</div></div>}
+        {modal.script&&modal.script.ytCaption&&<div style={{marginBottom:"14px"}}><div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#555",marginBottom:"6px",letterSpacing:"0.1em"}}>CAPTION</div><div style={{fontSize:"12px",color:"#888",fontFamily:"Space Mono",background:"#0A0A12",borderRadius:"8px",padding:"10px"}}>{modal.script.ytCaption}</div></div>}
+        {modal.videoUrl&&!generating[modal.id]&&serverOnline&&<button onClick={e=>{e.stopPropagation();generateOne(modal);}} style={{background:"#1a1a2a",border:"1px solid #2a2a3a",color:"#888",padding:"7px 16px",borderRadius:"8px",fontFamily:"Syne",fontWeight:700,fontSize:"12px",cursor:"pointer"}}>↺ Regenerate Video</button>}
+      </div>
+    </div>}
   </div>;
 }
 
