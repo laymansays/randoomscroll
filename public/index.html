@@ -139,6 +139,8 @@ async function fetchYTAnalytics(token, startDate, endDate){
 
 // ── Local Server ──────────────────────────────────────────────
 async function pingServer(){try{const r=await fetch(SERVER+"/ping",{signal:AbortSignal.timeout(2000)});return(await r.json()).ok===true;}catch{return false;}}
+// Detect if running locally (served by server.py)
+const IS_LOCAL = window.location.hostname==="localhost"||window.location.hostname==="127.0.0.1";
 async function generateOneVideo(jobData){const r=await fetch(SERVER+"/generate-one",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(jobData)});return r.json();}
 async function scheduleAllVideos(weekId){const r=await fetch(SERVER+"/schedule-all",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({weekId})});return r.json();}
 
@@ -377,16 +379,19 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px"}}>
       <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>{withVideo.length}/21 videos generated</div>
       <div style={{display:"flex",gap:"8px"}}>
-        <Btn small variant="ghost" onClick={onCheckServer}>{serverOnline?"● Server Online":"Connect Server"}</Btn>
+        <Btn small variant={serverOnline?"green":"outline"} onClick={onCheckServer}>{serverOnline?"● Server Online":IS_LOCAL?"Checking...":"Open http://localhost:8765"}</Btn>
         {serverOnline&&<Btn small onClick={generateAll} disabled={withScript.length===0}>Generate All Videos</Btn>}
       </div>
     </div>
     {!serverOnline&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"14px",marginBottom:"12px"}}>
-      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>START LOCAL SERVER ON YOUR LAPTOP</div>
-      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",lineHeight:2}}>
-        <div>1. Run pipeline first: <span style={{color:"#00CFFF"}}>python video_pipeline.py --jobs weekX_jobs.json --no-upload</span></div>
-        <div>2. Then start server: <span style={{color:"#00CFFF"}}>python server.py</span></div>
-        <div>3. Tap "Connect Server" above</div>
+      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>HOW TO GENERATE VIDEOS</div>
+      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",lineHeight:2.2}}>
+        <div>1. Download jobs file from Stage 3</div>
+        <div>2. Move it to your <span style={{color:"#00CFFF"}}>rand00mscroll_pipeline</span> folder</div>
+        <div>3. Run: <span style={{color:"#00CFFF"}}>python video_pipeline.py --jobs weekX_jobs.json --no-upload</span></div>
+        <div>4. Run: <span style={{color:"#00CFFF"}}>python server.py</span></div>
+        <div>5. <strong style={{color:"#ADFF2F"}}>Open http://localhost:8765 in your browser</strong></div>
+        <div style={{color:"var(--text3)",fontSize:"10px"}}>The app reloads from localhost — server connects automatically.</div>
       </div>
     </div>}
     <div style={{display:"flex",flexDirection:"column",gap:"6px",maxHeight:"500px",overflowY:"auto"}}>
@@ -739,8 +744,9 @@ function App(){
     tc.requestAccessToken();
   };
 
-  // Server check
-  const checkServer=async()=>{const ok=await pingServer();setServerOnline(ok);};
+  // Server check — auto-connect if running on localhost
+  const checkServer=async()=>{const ok=await pingServer();setServerOnline(ok);return ok;};
+  useEffect(()=>{if(IS_LOCAL){checkServer();}}, []);
 
   const activeWeekIdx=activeTab.startsWith("w")?parseInt(activeTab.slice(1)):-1;
   const isAggView=["month","quarter","year"].includes(activeTab);
