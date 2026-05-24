@@ -162,7 +162,7 @@ function ZoneCard({week,niche,status,score,selected,onClick,frozen}){
       </div>
     </div>
     <div style={{fontWeight:700,fontSize:"13px",color:done?"var(--text4)":"var(--text)",marginBottom:"5px",lineHeight:1.3}}>{niche||"Plan this week"}</div>
-    {score!=null&&<div style={{fontFamily:"Space Mono",fontSize:"14px",color:"#ADFF2F"}}>{score}<span style={{fontSize:"10px",color:"var(--text4)"}}/100</span></div>}
+    {score!=null&&<div style={{fontFamily:"Space Mono",fontSize:"14px",color:"#ADFF2F"}}>{score}<span style={{fontSize:"10px",color:"var(--text4)"}}>/100</span></div>}
     {status==="intention"&&!done&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginTop:"3px"}}>tap to plan</div>}
   </div>;
 }
