@@ -388,12 +388,22 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
       await new Promise(r=>setTimeout(r,500));
     }
   };
+  const isGeneratingAny = Object.values(generating).some(Boolean);
+  const currentlyGenerating = withScript.find(s=>generating[s.id]);
+
   return <div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px"}}>
-      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>{withVideo.length}/21 videos generated</div>
+      <div>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)",marginBottom:"2px"}}>{withVideo.length}/21 videos generated</div>
+        {isGeneratingAny&&currentlyGenerating&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F"}}>
+          Generating: {currentlyGenerating.script.title.slice(0,40)}...
+        </div>}
+      </div>
       <div style={{display:"flex",gap:"8px"}}>
         <Btn small variant={serverOnline?"green":"outline"} onClick={onCheckServer}>{serverOnline?"● Server Online":IS_LOCAL?"Checking...":"Open http://localhost:8080"}</Btn>
-        {serverOnline&&<Btn small onClick={generateAll} disabled={withScript.length===0}>Generate All Videos</Btn>}
+        {serverOnline&&<Btn small onClick={generateAll} disabled={withScript.length===0||isGeneratingAny}>
+          {isGeneratingAny?<><Spinner size={12}/>{withVideo.length}/21</>:"Generate All Videos"}
+        </Btn>}
       </div>
     </div>
     {!serverOnline&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"10px",padding:"14px",marginBottom:"12px"}}>
@@ -411,10 +421,10 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
       {withScript.map(slot=>{
         const ct=CTYPES.find(c=>c.id===slot.contentType);
         const isActive=activePreview===slot.id;
-        return <div key={slot.id} style={{background:"var(--card)",border:"1px solid "+(slot.videoUrl?"rgba(173,255,47,0.2)":isActive?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:"10px",overflow:"hidden"}}>
+        return <div key={slot.id} style={{background:"#111118",border:"1px solid "+(slot.videoUrl?"rgba(173,255,47,0.3)":isActive?"rgba(173,255,47,0.4)":"#2a2a3a"),borderRadius:"10px",overflow:"hidden"}}>
           <div style={{display:"flex",alignItems:"center",gap:"10px",padding:"10px 12px"}}>
             <div style={{width:5,height:5,borderRadius:"50%",background:slot.videoUrl?"#ADFF2F":"var(--border2)",flexShrink:0}}/>
-            <div style={{flex:1,fontSize:"13px",fontWeight:600,color:"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{slot.script.title}</div>
+            <div style={{flex:1,fontSize:"13px",fontWeight:600,color:"#E8E8F0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{slot.script.title}</div>
             <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",flexShrink:0}}>{DAYS[slot.day]} {TIMES[slot.time]}</div>
             {ct&&<Tag color={ct.color}>{ct.label}</Tag>}
             {slot.videoUrl&&<button onClick={()=>setActivePreview(isActive?null:slot.id)} style={{background:"var(--bg4)",border:"1px solid var(--border)",color:isActive?"#ADFF2F":"var(--text3)",padding:"4px 10px",borderRadius:"6px",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer"}}>{isActive?"Hide":"▶ Preview"}</button>}
