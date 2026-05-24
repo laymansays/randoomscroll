@@ -332,6 +332,24 @@ function FootageStage({week,updateWeek,pexelsKey}){
         </div>;
       })}
     </div>
+
+    {/* Export jobs — available as soon as footage is fetched */}
+    {slotsWithFootage.length>0&&<div style={{marginTop:"14px",background:"rgba(13,26,13,0.4)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:"10px",padding:"12px 14px"}}>
+      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>READY TO GENERATE VIDEOS</div>
+      <div style={{fontSize:"12px",color:"var(--text3)",lineHeight:1.8,marginBottom:"10px"}}>
+        <div>1. Download the jobs file below</div>
+        <div>2. Move it to your <span style={{color:"#00CFFF"}}>rand00mscroll_pipeline</span> folder</div>
+        <div>3. Open Claude Code → type: <span style={{color:"#00CFFF"}}>"Run pipeline with week{week.number}_jobs.json --no-upload"</span></div>
+        <div>4. Once done, start <span style={{color:"#00CFFF"}}>server.py</span> → come back to Stage 4 to preview</div>
+      </div>
+      <Btn onClick={()=>{
+        const jobs=slotsWithScript.map(s=>({jobId:s.id,weekId:week.id,niche:week.niche,topic:s.topic,day:DAYS[s.day],time:TIMES[s.time],contentType:s.contentType,voiceId:"en-US-ChristopherNeural",targetDuration:55,script:s.script?.script||"",hook:s.script?.hook||"",title:s.script?.title||"",ytCaption:s.script?.ytCaption||"",keywords:[slotKeyword(s,slotsWithScript.filter(x=>x.topic===s.topic).indexOf(s))],footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration}))}));
+        const blob=new Blob([JSON.stringify(jobs,null,2)],{type:"application/json"});
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement("a");a.href=url;a.download="week"+week.number+"_jobs.json";a.click();
+        URL.revokeObjectURL(url);
+      }}>↓ Download week{week.number}_jobs.json</Btn>
+    </div>}
   </div>;
 }
 
