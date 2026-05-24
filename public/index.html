@@ -393,19 +393,28 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
   };
   const isGeneratingAny = Object.values(generating).some(Boolean);
   const currentlyGenerating = withScript.find(s=>generating[s.id]);
+  const remaining = withScript.filter(s=>!s.videoUrl).length;
 
   return <div>
+    {/* Live status banner */}
+    {isGeneratingAny&&currentlyGenerating&&<div style={{background:"rgba(13,26,13,0.9)",border:"1px solid rgba(173,255,47,0.4)",borderRadius:"10px",padding:"10px 14px",marginBottom:"12px",display:"flex",alignItems:"center",gap:"10px"}}>
+      <Spinner size={14}/>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"2px"}}>GENERATING VIDEO {withVideo.length+1} OF {withScript.length}</div>
+        <div style={{fontSize:"13px",color:"#ffffff",fontWeight:700}}>{currentlyGenerating.script.title}</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#888",marginTop:"2px"}}>{remaining-1} more in queue after this · ~{Math.round((remaining-1)*60/60)} min remaining</div>
+      </div>
+      <div style={{fontFamily:"Space Mono",fontSize:"20px",fontWeight:700,color:"#ADFF2F"}}>{withVideo.length}/{withScript.length}</div>
+    </div>}
+
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"8px",marginBottom:"12px"}}>
-      <div>
-        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)",marginBottom:"2px"}}>{withVideo.length}/21 videos generated</div>
-        {isGeneratingAny&&currentlyGenerating&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F"}}>
-          Generating: {currentlyGenerating.script.title.slice(0,40)}...
-        </div>}
+      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:withVideo.length===21?"#ADFF2F":"var(--text3)"}}>
+        {withVideo.length===21?"✓ All 21 videos generated":withVideo.length+"/21 videos generated"}
       </div>
       <div style={{display:"flex",gap:"8px"}}>
         <Btn small variant={serverOnline?"green":"outline"} onClick={onCheckServer}>{serverOnline?"● Server Online":IS_LOCAL?"Checking...":"Open http://localhost:8080"}</Btn>
-        {serverOnline&&<Btn small onClick={generateAll} disabled={withScript.length===0||isGeneratingAny}>
-          {isGeneratingAny?<><Spinner size={12}/>{withVideo.length}/21</>:"Generate All Videos"}
+        {serverOnline&&<Btn small onClick={generateAll} disabled={withScript.length===0||isGeneratingAny||remaining===0}>
+          {isGeneratingAny?<><Spinner size={12}/>{withVideo.length}/{withScript.length}</>:remaining===0?"All Generated ✓":"Generate Remaining "+remaining}
         </Btn>}
       </div>
     </div>
