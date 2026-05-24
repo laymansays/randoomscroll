@@ -56,10 +56,19 @@ function makeSlots(types, topics) {
   const t  = types.length  ? types  : ["engaging"];
   const tp = topics && topics.length ? topics : ["general"];
   const s  = []; let ti = 0;
-  const spt = Math.ceil(21/tp.length); let sc = 0;
+  // Interleave topics across days — each day gets all topics, no monotony
+  // e.g. 3 topics: Mon=T1/T2/T3, Tue=T1/T2/T3, Wed=T1/T2/T3...
+  // e.g. 2 topics: Mon=T1/T2/T1, Tue=T2/T1/T2, alternating
+  // e.g. 1 topic: all same (no choice)
   for (let d=0;d<7;d++) for (let x=0;x<3;x++) {
-    s.push({id:uid(),day:d,time:x,contentType:t[ti++%t.length],topic:tp[Math.floor(sc/spt)%tp.length],status:"pending",script:null,footage:[],videoUrl:null,scheduleStatus:"unscheduled",youtubeId:null});
-    sc++;
+    const slotIndex = d*3+x;
+    // Rotate through topics at each slot position
+    const topicIdx = slotIndex % tp.length;
+    // Also shuffle content types independently
+    s.push({id:uid(),day:d,time:x,contentType:t[ti++%t.length],
+            topic:tp[topicIdx],
+            status:"pending",script:null,footage:[],videoUrl:null,
+            scheduleStatus:"unscheduled",youtubeId:null});
   }
   return s;
 }
@@ -471,6 +480,27 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
 }
 
 // ── Stage 5: Schedule ─────────────────────────────────────────
+function shuffleSlotSchedule(slots) {
+  // Collect all day/time combinations
+  const positions = slots.map(s => ({day:s.day, time:s.time}));
+  // Fisher-Yates shuffle
+  for (let i = positions.length-1; i > 0; i--) {
+    const j = Math.floor(Math.random()*(i+1));
+    [positions[i],positions[j]] = [positions[j],positions[i]];
+  }
+  // Reassign shuffled positions to slots, keeping topic grouping in mind
+  // Sort slots by topic so same-topic videos are spread across days
+  const byTopic = {};
+  slots.forEach(s => { (byTopic[s.topic]=byTopic[s.topic]||[]).push(s); });
+  const topics = Object.keys(byTopic);
+  // Interleave: T1[0], T2[0], T3[0], T1[1], T2[1], T3[1]...
+  const ordered = [];
+  const maxLen = Math.max(...topics.map(t=>byTopic[t].length));
+  for (let i=0;i<maxLen;i++) topics.forEach(t=>{ if(byTopic[t][i]) ordered.push(byTopic[t][i]); });
+  // Now assign positions in order
+  return ordered.map((slot,i) => ({...slot, day:positions[i].day, time:positions[i].time}));
+}
+
 function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
   const [scheduling,setScheduling]=useState(false);
   const [schedProg,setSchedProg]=useState(0);
@@ -537,6 +567,10 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
           <div style={{fontSize:"12px",color:"var(--text3)"}}>{withVideo.length}/21 videos ready · {scheduled.length}/21 scheduled</div>
         </div>
         <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
+          <Btn small variant="ghost" onClick={()=>{
+            const shuffled = shuffleSlotSchedule(week.slots);
+            updateWeek({slots:shuffled});
+          }}>⇄ Shuffle Schedule</Btn>
           <Btn small variant="ghost" onClick={exportJobs}>↓ Export Jobs</Btn>
           {scheduled.length<21&&(scheduling?<div style={{display:"flex",alignItems:"center",gap:"6px",padding:"6px 12px",background:"var(--bg3)",borderRadius:"8px"}}><Spinner size={11}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{schedProg}/{withVideo.length}</span></div>:<Btn onClick={doSchedule} disabled={withVideo.length===0}>{withVideo.length?"Schedule "+withVideo.length+" Videos →":"Generate Videos First"}</Btn>)}
           {scheduled.length===21&&<div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>LIVE ON YOUTUBE</span></div>}
