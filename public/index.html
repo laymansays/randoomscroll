@@ -243,24 +243,45 @@ function PlanStage({week,updateWeek}){
 function ScriptsStage({week,updateWeek}){
   const [generating,setGenerating]=useState(false);
   const [progress,setProgress]=useState(0);
+  const [total,setTotal]=useState(0);
+  const [currentTitle,setCurrentTitle]=useState("");
   const [expanded,setExpanded]=useState(null);
   const slots=week.slots||[];
-  const pending=slots.filter(s=>s.status==="pending");
+  const pending=slots.filter(s=>!s.script);
   const done=slots.filter(s=>s.script);
   const generateAll=async()=>{
-    setGenerating(true);setProgress(0);
     const p=week.slots.filter(s=>!s.script);
+    if(!p.length) return;
+    setGenerating(true);setProgress(0);setTotal(p.length);
+    // Process in batches of 3 but run ALL batches automatically — no stops
     for(let i=0;i<p.length;i+=3){
       const batch=p.slice(i,i+3);
-      try{const si=batch.map(s=>({topic:s.topic,contentType:s.contentType}));const scripts=await genScripts(si,week.evolvedPrompt);const updated=week.slots.map(s=>{const j=batch.findIndex(b=>b.id===s.id);return j>=0&&scripts[j]?{...s,script:scripts[j],status:"script_ready"}:s;});updateWeek({slots:updated});}catch(e){console.error(e);}
+      setCurrentTitle(batch[0].topic||batch[0].contentType);
+      try{
+        const si=batch.map(s=>({topic:s.topic,contentType:s.contentType}));
+        const scripts=await genScripts(si,week.evolvedPrompt);
+        const updated=week.slots.map(s=>{
+          const j=batch.findIndex(b=>b.id===s.id);
+          return j>=0&&scripts[j]?{...s,script:scripts[j],status:"script_ready"}:s;
+        });
+        updateWeek({slots:updated});
+      }catch(e){console.error(e);}
       setProgress(Math.min(i+3,p.length));
     }
-    setGenerating(false);
+    setGenerating(false);setCurrentTitle("");
   };
   return <div>
+    {generating&&<div style={{background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px",padding:"10px 14px",marginBottom:"12px",display:"flex",alignItems:"center",gap:"10px"}}>
+      <Spinner size={13}/>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"2px"}}>GENERATING SCRIPTS — DO NOT CLOSE</div>
+        <div style={{fontSize:"12px",color:"#fff"}}>{progress}/{total} done · {currentTitle}</div>
+      </div>
+      <div style={{fontFamily:"Space Mono",fontSize:"18px",fontWeight:700,color:"#ADFF2F"}}>{done.length}/21</div>
+    </div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>{done.length}/21 scripts ready</div>
-      {generating?<div style={{display:"flex",alignItems:"center",gap:"8px"}}><Spinner size={12}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{progress}/{pending.length+done.length}</span></div>:<Btn small onClick={generateAll} disabled={!pending.length}>{pending.length?"Generate "+pending.length+" Scripts":"All Done ✓"}</Btn>}
+      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:done.length===21?"#ADFF2F":"var(--text3)"}}>{done.length===21?"✓ All 21 scripts ready":done.length+"/21 scripts ready"}</div>
+      {!generating&&<Btn small onClick={generateAll} disabled={!pending.length}>{pending.length?"Generate All "+pending.length+" Scripts →":"All Done ✓"}</Btn>}
     </div>
     {done.length>0&&<div style={{background:"var(--bg4)",borderRadius:"4px",height:"4px",marginBottom:"12px"}}><div style={{width:(done.length/21*100)+"%",height:"100%",background:"#FF6B35",borderRadius:"4px",transition:"width .5s"}}/></div>}
     <div style={{display:"flex",flexDirection:"column",gap:"4px",maxHeight:"400px",overflowY:"auto"}}>
@@ -320,10 +341,44 @@ function FootageStage({week,updateWeek,pexelsKey}){
     }
   };
   const selectClip=(slotId,clip)=>{const updated=week.slots.map(s=>s.id===slotId?{...s,footage:[clip]}:s);updateWeek({slots:updated});};
+  const [fetching,setFetching]=useState(false);
+  const [fetchProg,setFetchProg]=useState(0);
+  const [fetchTitle,setFetchTitle]=useState("");
+  const fetchAllWithProgress=async()=>{
+    const toFetch=slotsWithScript.filter(s=>!s.footage||s.footage.length===0);
+    if(!toFetch.length||!pexelsKey) return;
+    setFetching(true);setFetchProg(0);
+    const topicCounts={};
+    for(let i=0;i<toFetch.length;i++){
+      const slot=toFetch[i];
+      setFetchTitle(slot.script?slot.script.title:slot.topic);
+      setFetchProg(i);
+      const tk=slot.topic||"general";
+      topicCounts[tk]=(topicCounts[tk]||0);
+      const kw=slotKeyword(slot,topicCounts[tk]);
+      topicCounts[tk]++;
+      const clips=await pexelsSearch(kw,pexelsKey);
+      const finalClips=clips.length>0?clips:await pexelsSearch(slot.topic||"nature",pexelsKey);
+      setResults(p=>({...p,[slot.id]:finalClips}));
+      if(finalClips.length>0){
+        const updated=week.slots.map(s=>s.id===slot.id?{...s,footage:finalClips}:s);
+        updateWeek({slots:updated});
+      }
+    }
+    setFetching(false);setFetchTitle("");
+  };
   return <div>
+    {fetching&&<div style={{background:"rgba(0,10,26,0.8)",border:"1px solid rgba(0,207,255,0.3)",borderRadius:"8px",padding:"10px 14px",marginBottom:"12px",display:"flex",alignItems:"center",gap:"10px"}}>
+      <Spinner size={13}/>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#00CFFF",marginBottom:"2px"}}>FETCHING FOOTAGE — DO NOT CLOSE</div>
+        <div style={{fontSize:"12px",color:"#fff"}}>{fetchProg}/{slotsWithScript.filter(s=>!s.footage||s.footage.length===0).length+fetchProg} done · {fetchTitle}</div>
+      </div>
+      <div style={{fontFamily:"Space Mono",fontSize:"18px",fontWeight:700,color:"#00CFFF"}}>{slotsWithFootage.length}/21</div>
+    </div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"}}>
-      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>{slotsWithFootage.length}/21 slots have footage</div>
-      <Btn small onClick={fetchAll} disabled={!pexelsKey||slotsWithScript.length===0}>{!pexelsKey?"Add Pexels Key in Setup":slotsWithFootage.length===slotsWithScript.length?"Refresh All":"Fetch All Footage"}</Btn>
+      <div style={{fontFamily:"Space Mono",fontSize:"11px",color:slotsWithFootage.length===21?"#ADFF2F":"var(--text3)"}}>{slotsWithFootage.length===21?"✓ All 21 slots have footage":slotsWithFootage.length+"/21 slots have footage"}</div>
+      {!fetching&&<Btn small onClick={fetchAllWithProgress} disabled={!pexelsKey||slotsWithScript.length===0}>{!pexelsKey?"Add Pexels Key in Setup":slotsWithFootage.length===slotsWithScript.length?"Refresh All":"Fetch All Footage →"}</Btn>}
     </div>
     {!pexelsKey&&<div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"12px",fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)"}}>Add your Pexels API key in Setup ⚙ to fetch stock footage.</div>}
     <div style={{display:"flex",flexDirection:"column",gap:"8px",maxHeight:"440px",overflowY:"auto"}}>
@@ -522,53 +577,64 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
     setLoadingComp(false);
   };
 
+  // uploadOne: upload a single video independently — doesn't block other operations
+  const uploadOne = async(slot) => {
+    try {
+      const r = await fetch(SERVER+"/upload-one", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({jobId:slot.id})
+      });
+      const d = await r.json();
+      if(d.success||d.already) {
+        updateWeek({slots:week.slots.map(s=>s.id===slot.id?{...s,scheduleStatus:"youtube_done"}:s)});
+        return true;
+      }
+    } catch(e){ console.error(e); }
+    return false;
+  };
+
   const doSchedule=async()=>{
     if(!serverOnline){onCheckServer();return;}
     setScheduling(true);setSchedProg(0);
 
-    const totalSlots = week.slots.filter(s=>s.videoUrl||s.status==="pending"||!s.videoUrl);
-    let scheduled = 0;
-    const POLL_INTERVAL = 15000; // check every 15 seconds for new videos
-    const MAX_WAIT = 90 * 60 * 1000; // max 90 min total
-    const startTime = Date.now();
+    const POLL_MS  = 12000; // poll every 12 seconds
+    const MAX_WAIT = 90*60*1000;
+    const start    = Date.now();
+    let done = 0;
 
-    const uploadPending = async () => {
-      try {
-        const r = await scheduleAllVideos(week.id);
-        scheduled += (r.done||0);
-        setSchedProg(scheduled);
-        updateWeek({slots:week.slots.map(s=>{
-          const res=(r.results||[]).find(x=>x.jobId===s.id);
-          return res&&res.success?{...s,scheduleStatus:"youtube_done"}:s;
-        })});
-        return r.done||0;
-      } catch(e){ console.error(e); return 0; }
-    };
-
-    // Upload whatever is ready now
-    await uploadPending();
-
-    // Keep polling for newly generated videos
-    const unscheduled = ()=>week.slots.filter(s=>!s.videoUrl&&s.scheduleStatus!=="youtube_done").length;
-    while(unscheduled()>0 && Date.now()-startTime < MAX_WAIT){
-      await new Promise(r=>setTimeout(r,POLL_INTERVAL));
-      // Refresh video list from server
-      try {
-        const vr = await fetch(SERVER+"/videos");
-        const videos = await vr.json();
-        const updated = week.slots.map(s=>{
-          const sv = videos.find(v=>v.jobId===s.id);
-          return sv&&sv.hasVideo&&!s.videoUrl?{...s,videoUrl:SERVER+"/file/"+s.id+".mp4"}:s;
-        });
-        updateWeek({slots:updated});
-      } catch{}
-      // Upload any newly ready videos
-      await uploadPending();
+    // Upload all slots that already have videos
+    const readyNow = week.slots.filter(s=>s.videoUrl&&s.scheduleStatus!=="youtube_done");
+    for(const slot of readyNow){
+      const ok = await uploadOne(slot);
+      if(ok){ done++; setSchedProg(done); }
     }
 
-    // Mark week as fully scheduled if all done
-    const allDone = week.slots.every(s=>s.scheduleStatus==="youtube_done");
-    if(allDone) updateWeek({scheduled:true,scheduledAt:new Date().toISOString()});
+    // Watch for remaining slots to finish generating, upload each as it appears
+    const stillPending = ()=>week.slots.filter(s=>s.scheduleStatus!=="youtube_done");
+    while(stillPending().length>0 && Date.now()-start < MAX_WAIT){
+      await new Promise(r=>setTimeout(r,POLL_MS));
+      // Check server for newly generated videos
+      try {
+        const vr = await fetch(SERVER+"/videos");
+        const serverVids = await vr.json();
+        // Find slots that now have videos but aren't scheduled yet
+        const newlyReady = week.slots.filter(s=>{
+          if(s.scheduleStatus==="youtube_done") return false;
+          const sv = serverVids.find(v=>v.jobId===s.id);
+          return sv && sv.hasVideo;
+        });
+        for(const slot of newlyReady){
+          // Update local state with video URL
+          updateWeek({slots:week.slots.map(s=>s.id===slot.id?{...s,videoUrl:SERVER+"/file/"+s.id+".mp4"}:s)});
+          const ok = await uploadOne({...slot,videoUrl:SERVER+"/file/"+slot.id+".mp4"});
+          if(ok){ done++; setSchedProg(done); }
+        }
+        // Stop if all done
+        if(serverVids.every(v=>v.scheduleStatus==="youtube_done")) break;
+      } catch(e){ console.error(e); }
+    }
+
+    updateWeek({scheduled:done>0,scheduledAt:new Date().toISOString()});
     setScheduling(false);
   };
 
