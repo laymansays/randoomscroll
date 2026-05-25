@@ -4,7 +4,7 @@
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
 <meta name="theme-color" content="#ADFF2F"/>
-<title>rand00mscroll</title>
+<title>Rand00mscroll</title>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Stardos+Stencil:wght@400;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
@@ -580,9 +580,8 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
   };
 
   // uploadOne: upload a single video independently — doesn't block other operations
-  const uploadOne = async(slot) => {
+  const uploadOne = async(slot, attempt=1) => {
     try {
-      // Pass all metadata so server can build manifest entry if missing
       const r = await fetch(SERVER+"/upload-one", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
@@ -599,7 +598,21 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
         return true;
       }
       console.warn("upload-one failed:", d.error);
-    } catch(e){ console.error("uploadOne error:",e); }
+      // Retry up to 3 times on non-auth errors
+      if(attempt < 3 && d.error && !d.error.includes("auth") && !d.error.includes("401")){
+        console.log("Retrying in 8s... attempt", attempt+1);
+        await new Promise(r=>setTimeout(r,8000));
+        return uploadOne(slot, attempt+1);
+      }
+    } catch(e){
+      console.error("uploadOne error:",e);
+      // Retry on network errors
+      if(attempt < 3){
+        console.log("Network error — retrying in 10s... attempt", attempt+1);
+        await new Promise(r=>setTimeout(r,10000));
+        return uploadOne(slot, attempt+1);
+      }
+    }
     return false;
   };
 
