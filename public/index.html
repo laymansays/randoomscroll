@@ -537,39 +537,30 @@ function VideoStage({week,updateWeek,serverOnline,onCheckServer}){
 }
 
 // ── Stage 5: Schedule ─────────────────────────────────────────
-function shuffleSlotSchedule(slots) {
-  // Collect all day/time combinations
-  const positions = slots.map(s => ({day:s.day, time:s.time}));
-  // Fisher-Yates shuffle
-  for (let i = positions.length-1; i > 0; i--) {
-    const j = Math.floor(Math.random()*(i+1));
-    [positions[i],positions[j]] = [positions[j],positions[i]];
-  }
-  // Reassign shuffled positions to slots, keeping topic grouping in mind
-  // Sort slots by topic so same-topic videos are spread across days
-  const byTopic = {};
-  slots.forEach(s => { (byTopic[s.topic]=byTopic[s.topic]||[]).push(s); });
-  const topics = Object.keys(byTopic);
-  // Interleave: T1[0], T2[0], T3[0], T1[1], T2[1], T3[1]...
-  const ordered = [];
-  const maxLen = Math.max(...topics.map(t=>byTopic[t].length));
-  for (let i=0;i<maxLen;i++) topics.forEach(t=>{ if(byTopic[t][i]) ordered.push(byTopic[t][i]); });
-  // Now assign positions in order
-  return ordered.map((slot,i) => ({...slot, day:positions[i].day, time:positions[i].time}));
+function shuffleSlotSchedule(slots){
+  const positions=slots.map(s=>({day:s.day,time:s.time}));
+  for(let i=positions.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[positions[i],positions[j]]=[positions[j],positions[i]];}
+  const byTopic={};slots.forEach(s=>{(byTopic[s.topic]=byTopic[s.topic]||[]).push(s);});
+  const topics=Object.keys(byTopic);const maxLen=Math.max(...topics.map(t=>byTopic[t].length));
+  const ordered=[];
+  for(let i=0;i<maxLen;i++)topics.forEach(t=>{if(byTopic[t][i])ordered.push(byTopic[t][i]);});
+  return ordered.map((slot,i)=>({...slot,day:positions[i].day,time:positions[i].time}));
 }
 
-function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
-  const [scheduling,setScheduling]=useState(false);
-  const [schedProg,setSchedProg]=useState(0);
+function ScheduleStage({week,updateWeek,prevWeeks}){
   const [comparison,setComparison]=useState(week.comparison||null);
   const [loadingComp,setLoadingComp]=useState(false);
+  const [manifest,setManifest]=useState("");
+  const [importErr,setImportErr]=useState("");
+  const [importOk,setImportOk]=useState(false);
+  const [showImport,setShowImport]=useState(false);
   const slots=week.slots||[];
   const withVideo=slots.filter(s=>s.videoUrl);
   const scheduled=slots.filter(s=>s.scheduleStatus==="youtube_done");
   const prevWithAnalytics=prevWeeks.filter(w=>w.analytics);
 
   const loadComparison=async()=>{
-    if(!prevWithAnalytics.length) return;
+    if(!prevWithAnalytics.length)return;
     setLoadingComp(true);
     const avg={avgViews:0,avgCTR:0,avgRetention:0,avgSubs:0};
     prevWithAnalytics.forEach(w=>{avg.avgViews+=w.analytics.views||0;avg.avgCTR+=w.analytics.ctr||0;avg.avgRetention+=w.analytics.avgRetention||0;avg.avgSubs+=w.analytics.subscribersGained||0;});
@@ -579,91 +570,25 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
     setLoadingComp(false);
   };
 
-  // uploadOne: upload a single video independently — doesn't block other operations
-  // Fire-and-forget upload — server uploads in background, we poll for completion
-  const uploadOne = async(slot) => {
-    try {
-      await fetch(SERVER+"/upload-one", {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          jobId:    slot.id,
-          title:    slot.script?.title||slot.topic||"Untitled",
-          ytCaption:slot.script?.ytCaption||"#Shorts",
-          day:      DAYS[slot.day],
-          time:     TIMES[slot.time],
-        })
-      });
-      // Don't wait for success/fail — server handles it in background
-      // Polling loop in doSchedule will detect completion via /videos
-      return true; // queued successfully
-    } catch(e){
-      console.error("uploadOne queue error:",e);
-      return false;
-    }
-  };
-
-  const doSchedule=async()=>{
-    if(!serverOnline){onCheckServer();return;}
-    setScheduling(true);setSchedProg(0);
-
-    const POLL_MS  = 8000;  // poll every 8 seconds
-    const MAX_WAIT = 90*60*1000;
-    const start    = Date.now();
-
-    // Queue all ready videos for upload (fire-and-forget, server handles in background)
-    const readyNow = week.slots.filter(s=>s.videoUrl&&s.scheduleStatus!=="youtube_done");
-    for(const slot of readyNow){
-      await uploadOne(slot);
-      await new Promise(r=>setTimeout(r,500)); // small gap between queues
-    }
-
-    // Poll /videos every 8 seconds to detect completed uploads
-    while(Date.now()-start < MAX_WAIT){
-      await new Promise(r=>setTimeout(r,POLL_MS));
-      try {
-        const vr = await fetch(SERVER+"/videos");
-        const serverVids = await vr.json();
-
-        // Count how many are done on server
-        const doneOnServer = serverVids.filter(v=>v.scheduleStatus==="youtube_done");
-        setSchedProg(doneOnServer.length);
-
-        // Sync to app state
-        if(doneOnServer.length>0){
-          updateWeek({slots:week.slots.map(s=>{
-            const sv = serverVids.find(v=>v.jobId===s.id);
-            return sv&&sv.scheduleStatus==="youtube_done"?{...s,scheduleStatus:"youtube_done"}:s;
-          })});
-        }
-
-        // Queue newly generated videos that appeared since we started
-        const newlyReady = week.slots.filter(s=>{
-          if(s.scheduleStatus==="youtube_done") return false;
-          const sv = serverVids.find(v=>v.jobId===s.id);
-          return sv&&sv.hasVideo&&!sv.scheduleStatus==="youtube_done";
-        });
-        for(const slot of newlyReady){
-          updateWeek({slots:week.slots.map(s=>s.id===slot.id?{...s,videoUrl:SERVER+"/file/"+s.id+".mp4"}:s)});
-          await uploadOne({...slot});
-        }
-
-        // All done?
-        if(doneOnServer.length>=week.slots.filter(s=>s.videoUrl).length) break;
-      } catch(e){ console.error("poll error:",e); }
-    }
-
-    updateWeek({scheduled:true,scheduledAt:new Date().toISOString()});
-    setScheduling(false);
-  };
-
   const exportJobs=()=>{
-    const jobs=week.slots.filter(s=>s.script).map(s=>({jobId:s.id,weekId:week.id,niche:week.niche,topic:s.topic,day:DAYS[s.day],time:TIMES[s.time],contentType:s.contentType,voiceId:"en-US-ChristopherNeural",targetDuration:55,script:s.script?.script||"",hook:s.script?.hook||"",title:s.script?.title||"",ytCaption:s.script?.ytCaption||"",keywords:[s.topic],footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration}))}));
+    const jobs=slots.filter(s=>s.script).map(s=>({jobId:s.id,weekId:week.id,niche:week.niche,topic:s.topic,day:DAYS[s.day],time:TIMES[s.time],contentType:s.contentType,voiceId:"en-US-ChristopherNeural",targetDuration:55,script:s.script?.script||"",hook:s.script?.hook||"",title:s.script?.title||"",ytCaption:s.script?.ytCaption||"",keywords:[s.topic],footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration}))}));
     const blob=new Blob([JSON.stringify(jobs,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="week"+week.number+"_jobs.json";a.click();URL.revokeObjectURL(url);
   };
 
+  const doImport=()=>{
+    setImportErr("");
+    try{
+      const m=JSON.parse(manifest);
+      if(!Array.isArray(m))throw new Error();
+      updateWeek({scheduled:true,scheduledAt:new Date().toISOString(),
+        slots:slots.map(s=>{const e=m.find(x=>x.jobId===s.id);return e&&e.scheduleStatus==="youtube_done"?{...s,scheduleStatus:"youtube_done",bufferUpdateId:e.bufferUpdateId||""}:s;})
+      });
+      setImportOk(true);setShowImport(false);setManifest("");
+    }catch{setImportErr("Invalid JSON — paste the full manifest.json content");}
+  };
+
   return <div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
-    {/* Comparison panel — weeks 2+ only */}
     {prevWithAnalytics.length>0&&<div style={{background:"var(--bg3)",border:"1px solid rgba(0,207,255,0.15)",borderRadius:"10px",padding:"14px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
         <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#00CFFF"}}>HOW WEEK {week.number} BEATS PREVIOUS WEEKS</div>
@@ -671,51 +596,80 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
       </div>
       {comparison?<div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
         <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-          <StatBox label="Hook Score" value={comparison.confidence+"%"} sub="confidence" accent="#ADFF2F"/>
-          <StatBox label="CTR Change" value={comparison.predictedCTRChange||"—"} sub="predicted" accent={comparison.predictedCTRChange&&comparison.predictedCTRChange.startsWith("+")?"#ADFF2F":"#FF2D6B"}/>
-          <StatBox label="Retention" value={comparison.predictedRetentionChange||"—"} sub="predicted" accent="#00CFFF"/>
+          <StatBox label="Confidence" value={comparison.confidence+"%"} accent="#ADFF2F"/>
+          <StatBox label="CTR Change" value={comparison.predictedCTRChange||"—"} accent="#00CFFF"/>
+          <StatBox label="Retention"  value={comparison.predictedRetentionChange||"—"} accent="#B06EF3"/>
         </div>
         <div style={{background:"rgba(173,255,47,0.05)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:"8px",padding:"10px 12px"}}>
           <div style={{fontWeight:700,fontSize:"13px",color:"#ADFF2F",marginBottom:"6px"}}>{comparison.overallVerdict}</div>
           {comparison.hookImprovement&&<div style={{fontSize:"12px",color:"var(--text2)",marginBottom:"4px"}}><strong>Hooks:</strong> {comparison.hookImprovement}</div>}
           {comparison.topicStrength&&<div style={{fontSize:"12px",color:"var(--text2)",marginBottom:"4px"}}><strong>Topics:</strong> {comparison.topicStrength}</div>}
-          {comparison.formatOptimisation&&<div style={{fontSize:"12px",color:"var(--text2)",marginBottom:"4px"}}><strong>Format:</strong> {comparison.formatOptimisation}</div>}
           {comparison.timingAdvantage&&<div style={{fontSize:"12px",color:"var(--text2)"}}><strong>Timing:</strong> {comparison.timingAdvantage}</div>}
         </div>
         {comparison.risks&&comparison.risks.length>0&&<div style={{fontSize:"11px",color:"#FF6B35",fontFamily:"Space Mono"}}>Risks: {comparison.risks.join(" · ")}</div>}
-      </div>:<div style={{fontSize:"12px",color:"var(--text4)"}}>Compare against {prevWithAnalytics.length} previous week{prevWithAnalytics.length!==1?"s":""} avg to see prediction</div>}
+      </div>:<div style={{fontSize:"12px",color:"var(--text4)"}}>Compare vs {prevWithAnalytics.length} previous week{prevWithAnalytics.length!==1?"s":""} to see prediction</div>}
     </div>}
 
-    {/* Schedule controls */}
     <div style={{background:"var(--card)",border:"1px solid "+(scheduled.length===21?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:"10px",padding:"14px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:"10px",marginBottom:"12px"}}>
         <div>
-          <div style={{fontWeight:700,fontSize:"14px",marginBottom:"2px"}}>{scheduled.length===21?"All 21 Videos on YouTube ✓":"Schedule to YouTube"}</div>
+          <div style={{fontWeight:700,fontSize:"14px",marginBottom:"2px"}}>{scheduled.length===21?"✓ All 21 Videos Scheduled":"Schedule to YouTube"}</div>
           <div style={{fontSize:"12px",color:"var(--text3)"}}>{withVideo.length}/21 videos ready · {scheduled.length}/21 scheduled</div>
         </div>
         <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-          <Btn small variant="ghost" onClick={()=>{
-            const shuffled = shuffleSlotSchedule(week.slots);
-            updateWeek({slots:shuffled});
-          }}>⇄ Shuffle Schedule</Btn>
+          <Btn small variant="ghost" onClick={()=>updateWeek({slots:shuffleSlotSchedule(slots)})}>⇄ Shuffle</Btn>
           <Btn small variant="ghost" onClick={exportJobs}>↓ Export Jobs</Btn>
-          {scheduled.length<21&&(scheduling
-          ?<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"8px 14px",background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px"}}>
-              <Spinner size={11}/>
-              <div>
-                <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>{schedProg} uploaded · watching for more...</div>
-                <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#555",marginTop:"2px"}}>uploads each video as it finishes generating</div>
-              </div>
-            </div>
-          :<Btn onClick={doSchedule} disabled={withVideo.length===0}>{withVideo.length?"Schedule "+withVideo.length+" Videos →":"Generate Videos First"}</Btn>
-        )}
-          {scheduled.length===21&&<div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/><span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>LIVE ON YOUTUBE</span></div>}
         </div>
       </div>
-      {!serverOnline&&withVideo.length===0&&<div style={{fontSize:"12px",color:"var(--text4)",fontFamily:"Space Mono"}}>Start server.py on your laptop then click "Connect Server" in the Videos stage to generate videos here.</div>}
+      {scheduled.length<21&&<div style={{background:"var(--bg3)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:"8px",padding:"12px 14px",marginBottom:"12px"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"8px"}}>UPLOAD TO YOUTUBE — RUN IN TERMINAL</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#00CFFF",background:"var(--bg4)",borderRadius:"6px",padding:"8px 12px",marginBottom:"10px",userSelect:"all"}}>python video_pipeline.py --jobs week{week.number}_jobs.json --upload-only</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2,marginBottom:"10px"}}>
+          <div>Uploads all {withVideo.length} videos to Buffer sequentially</div>
+          <div>Takes ~2-3 min total · no browser required · reliable</div>
+          <div>When done → paste manifest.json below to sync status</div>
+        </div>
+        <Btn small variant="outline" onClick={()=>setShowImport(!showImport)}>{importOk?"✓ Synced":"Import manifest.json"}</Btn>
+      </div>}
+      {scheduled.length===21&&<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 14px",background:"rgba(13,26,13,0.5)",borderRadius:"8px"}}>
+        <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
+        <span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>LIVE ON YOUTUBE · Publishing 3×/day via Buffer</span>
+      </div>}
+    </div>
+
+    {showImport&&<div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"10px",padding:"14px"}}>
+      <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:"8px"}}>PASTE output_videos/manifest.json CONTENTS</div>
+      <textarea value={manifest} onChange={e=>setManifest(e.target.value)} rows={5}
+        placeholder='[{"jobId":"abc","scheduleStatus":"youtube_done"},...]'
+        style={{width:"100%",padding:"10px",fontSize:"11px",fontFamily:"Space Mono",lineHeight:1.6,marginBottom:"10px",borderRadius:"8px"}}/>
+      {importErr&&<div style={{fontSize:"12px",color:"#FF2D6B",marginBottom:"8px"}}>{importErr}</div>}
+      <div style={{display:"flex",gap:"8px"}}>
+        <Btn small onClick={doImport}>Sync Status</Btn>
+        <Btn small variant="ghost" onClick={()=>{setShowImport(false);setManifest("");setImportErr("");}}>Cancel</Btn>
+      </div>
+    </div>}
+
+    <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
+      {DAYS.map((day,di)=>{
+        const daySlots=slots.filter(s=>s.day===di);
+        return <div key={day}>
+          <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",padding:"6px 0 3px",letterSpacing:"0.1em"}}>{day.toUpperCase()}</div>
+          {daySlots.map(slot=>{
+            const ct=CTYPES.find(c=>c.id===slot.contentType);const done=slot.scheduleStatus==="youtube_done";
+            return <div key={slot.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:done?"rgba(13,26,13,0.4)":"var(--card2)",border:"1px solid "+(done?"rgba(173,255,47,0.2)":"var(--border)"),borderRadius:"8px",marginBottom:"2px"}}>
+              <div style={{width:6,height:6,borderRadius:"50%",background:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--border2)",flexShrink:0}}/>
+              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",width:"44px",flexShrink:0}}>{TIMES[slot.time]}</div>
+              <div style={{flex:1,fontSize:"12px",color:done?"#ADFF2F":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:slot.topic}</div>
+              {ct&&<Tag color={done?"rgba(173,255,47,0.5)":ct.color}>{ct.label}</Tag>}
+              {done&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F",flexShrink:0}}>✓</span>}
+            </div>;
+          })}
+        </div>;
+      })}
     </div>
   </div>;
 }
+
 
 // ── Stage 6: Analytics ────────────────────────────────────────
 function AnalyticsStage({week,updateWeek,ytToken,connectYT,allWeeks}){
@@ -836,7 +790,7 @@ function WeekWorkspace({week,updateWeek,settings,ytToken,connectYT,serverOnline,
       {footageDone>0||videosDone>0?<VideoStage week={week} updateWeek={updateWeek} serverOnline={serverOnline} onCheckServer={onCheckServer}/>:<div style={{fontSize:"12px",color:"var(--text4)"}}>Get footage first.</div>}
     </StageCard>
     <StageCard number={5} title="Review + Schedule" status={stageStatus("schedule")} expanded={expanded==="schedule"} onToggle={()=>videosDone>0&&toggle("schedule")}>
-      {videosDone>0?<ScheduleStage week={week} updateWeek={updateWeek} prevWeeks={prevWeeks} serverOnline={serverOnline} onCheckServer={onCheckServer}/>:<div style={{fontSize:"12px",color:"var(--text4)"}}>Generate videos first.</div>}
+      {videosDone>0?<ScheduleStage week={week} updateWeek={updateWeek} prevWeeks={prevWeeks}/>:<div style={{fontSize:"12px",color:"var(--text4)"}}>Generate videos first.</div>}
     </StageCard>
     <StageCard number={6} title="YouTube Analytics" status={stageStatus("analytics")} expanded={expanded==="analytics"} onToggle={()=>week.scheduled&&toggle("analytics")}>
       {week.scheduled?<AnalyticsStage week={week} updateWeek={updateWeek} ytToken={ytToken} connectYT={connectYT} allWeeks={allWeeks}/>:<div style={{fontSize:"12px",color:"var(--text4)"}}>Schedule videos first. Analytics appear after your content goes live.</div>}
