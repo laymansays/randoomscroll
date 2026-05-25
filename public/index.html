@@ -692,10 +692,25 @@ function ScheduleStage({week,updateWeek,prevWeeks}){
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>TIME</div>
-                  <select value={slotTime} onChange={e=>upd("scheduleTime",e.target.value)}
-                    style={{width:"100%",fontFamily:"Space Mono",fontSize:"12px",padding:"6px 8px",borderRadius:"7px",border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)"}}>
-                    {["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM","9:00 PM"].map(t=><option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <input type="time"
+                    value={(()=>{
+                      // Convert "7:00 AM" / "13:00" to HH:MM for input[type=time]
+                      if(!slotTime) return "07:00";
+                      if(slotTime.includes("AM")||slotTime.includes("PM")){
+                        const [t,m]=slotTime.split(" ");
+                        let [h,min]=t.split(":");
+                        h=parseInt(h);
+                        if(m==="PM"&&h!==12) h+=12;
+                        if(m==="AM"&&h===12) h=0;
+                        return String(h).padStart(2,"0")+":"+min;
+                      }
+                      return slotTime.slice(0,5);
+                    })()}
+                    onChange={e=>{
+                      // Store as HH:MM (24h) for pipeline compatibility
+                      upd("scheduleTime", e.target.value);
+                    }}
+                    style={{width:"100%",fontFamily:"Space Mono",fontSize:"12px",padding:"6px 8px",borderRadius:"7px",border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)"}}/>
                 </div>
                 <div style={{flexShrink:0,paddingTop:"16px"}}>
                   <div style={{fontFamily:"Space Mono",fontSize:"9px",color:slot.videoUrl?"#FF6B35":"var(--text4)"}}>{slot.videoUrl?"READY":"NO VID"}</div>
@@ -706,6 +721,15 @@ function ScheduleStage({week,updateWeek,prevWeeks}){
         </div>;
       })}
     </div>
+
+    {/* Export + Schedule CTA */}
+    {slots.some(s=>s.scheduleStatus!=="youtube_done"&&s.videoUrl)&&<div style={{background:"rgba(13,26,13,0.5)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"12px",padding:"14px 16px",marginTop:"8px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px",flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:"3px"}}>READY TO SCHEDULE</div>
+        <div style={{fontSize:"12px",color:"var(--text3)"}}>Set your dates and times above, then export</div>
+      </div>
+      <Btn onClick={exportJobs}>↓ Export Jobs →</Btn>
+    </div>}
   </div>;
 }
 
