@@ -580,9 +580,10 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
   };
 
   // uploadOne: upload a single video independently — doesn't block other operations
-  const uploadOne = async(slot, attempt=1) => {
+  // Fire-and-forget upload — server uploads in background, we poll for completion
+  const uploadOne = async(slot) => {
     try {
-      const r = await fetch(SERVER+"/upload-one", {
+      await fetch(SERVER+"/upload-one", {
         method:"POST", headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
           jobId:    slot.id,
@@ -592,72 +593,66 @@ function ScheduleStage({week,updateWeek,prevWeeks,serverOnline,onCheckServer}){
           time:     TIMES[slot.time],
         })
       });
-      const d = await r.json();
-      if(d.success||d.already) {
-        updateWeek({slots:week.slots.map(s=>s.id===slot.id?{...s,scheduleStatus:"youtube_done"}:s)});
-        return true;
-      }
-      console.warn("upload-one failed:", d.error);
-      // Retry up to 3 times on non-auth errors
-      if(attempt < 3 && d.error && !d.error.includes("auth") && !d.error.includes("401")){
-        console.log("Retrying in 8s... attempt", attempt+1);
-        await new Promise(r=>setTimeout(r,8000));
-        return uploadOne(slot, attempt+1);
-      }
+      // Don't wait for success/fail — server handles it in background
+      // Polling loop in doSchedule will detect completion via /videos
+      return true; // queued successfully
     } catch(e){
-      console.error("uploadOne error:",e);
-      // Retry on network errors
-      if(attempt < 3){
-        console.log("Network error — retrying in 10s... attempt", attempt+1);
-        await new Promise(r=>setTimeout(r,10000));
-        return uploadOne(slot, attempt+1);
-      }
+      console.error("uploadOne queue error:",e);
+      return false;
     }
-    return false;
   };
 
   const doSchedule=async()=>{
     if(!serverOnline){onCheckServer();return;}
     setScheduling(true);setSchedProg(0);
 
-    const POLL_MS  = 12000; // poll every 12 seconds
+    const POLL_MS  = 8000;  // poll every 8 seconds
     const MAX_WAIT = 90*60*1000;
     const start    = Date.now();
-    let done = 0;
 
-    // Upload all slots that already have videos
+    // Queue all ready videos for upload (fire-and-forget, server handles in background)
     const readyNow = week.slots.filter(s=>s.videoUrl&&s.scheduleStatus!=="youtube_done");
     for(const slot of readyNow){
-      const ok = await uploadOne(slot);
-      if(ok){ done++; setSchedProg(done); }
+      await uploadOne(slot);
+      await new Promise(r=>setTimeout(r,500)); // small gap between queues
     }
 
-    // Watch for remaining slots to finish generating, upload each as it appears
-    const stillPending = ()=>week.slots.filter(s=>s.scheduleStatus!=="youtube_done");
-    while(stillPending().length>0 && Date.now()-start < MAX_WAIT){
+    // Poll /videos every 8 seconds to detect completed uploads
+    while(Date.now()-start < MAX_WAIT){
       await new Promise(r=>setTimeout(r,POLL_MS));
-      // Check server for newly generated videos
       try {
         const vr = await fetch(SERVER+"/videos");
         const serverVids = await vr.json();
-        // Find slots that now have videos but aren't scheduled yet
+
+        // Count how many are done on server
+        const doneOnServer = serverVids.filter(v=>v.scheduleStatus==="youtube_done");
+        setSchedProg(doneOnServer.length);
+
+        // Sync to app state
+        if(doneOnServer.length>0){
+          updateWeek({slots:week.slots.map(s=>{
+            const sv = serverVids.find(v=>v.jobId===s.id);
+            return sv&&sv.scheduleStatus==="youtube_done"?{...s,scheduleStatus:"youtube_done"}:s;
+          })});
+        }
+
+        // Queue newly generated videos that appeared since we started
         const newlyReady = week.slots.filter(s=>{
           if(s.scheduleStatus==="youtube_done") return false;
           const sv = serverVids.find(v=>v.jobId===s.id);
-          return sv && sv.hasVideo;
+          return sv&&sv.hasVideo&&!sv.scheduleStatus==="youtube_done";
         });
         for(const slot of newlyReady){
-          // Update local state with video URL
           updateWeek({slots:week.slots.map(s=>s.id===slot.id?{...s,videoUrl:SERVER+"/file/"+s.id+".mp4"}:s)});
-          const ok = await uploadOne({...slot,videoUrl:SERVER+"/file/"+slot.id+".mp4"});
-          if(ok){ done++; setSchedProg(done); }
+          await uploadOne({...slot});
         }
-        // Stop if all done
-        if(serverVids.every(v=>v.scheduleStatus==="youtube_done")) break;
-      } catch(e){ console.error(e); }
+
+        // All done?
+        if(doneOnServer.length>=week.slots.filter(s=>s.videoUrl).length) break;
+      } catch(e){ console.error("poll error:",e); }
     }
 
-    updateWeek({scheduled:done>0,scheduledAt:new Date().toISOString()});
+    updateWeek({scheduled:true,scheduledAt:new Date().toISOString()});
     setScheduling(false);
   };
 
