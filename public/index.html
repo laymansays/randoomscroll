@@ -571,7 +571,12 @@ function ScheduleStage({week,updateWeek,prevWeeks}){
   };
 
   const exportJobs=()=>{
-    const jobs=slots.filter(s=>s.script).map(s=>({jobId:s.id,weekId:week.id,niche:week.niche,topic:s.topic,day:DAYS[s.day],time:TIMES[s.time],contentType:s.contentType,voiceId:"en-US-ChristopherNeural",targetDuration:55,script:s.script?.script||"",hook:s.script?.hook||"",title:s.script?.title||"",ytCaption:s.script?.ytCaption||"",keywords:[s.topic],footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration}))}));
+    const getSlotDate=(slot)=>{
+      if(slot.scheduleDate) return slot.scheduleDate;
+      const now=new Date();const dayOffset=(slot.day-now.getDay()+7)%7||7;
+      const d=new Date(now);d.setDate(d.getDate()+dayOffset);return d.toISOString().slice(0,10);
+    };
+    const jobs=slots.filter(s=>s.script).map(s=>({jobId:s.id,weekId:week.id,niche:week.niche,topic:s.topic,day:DAYS[s.day],time:s.scheduleTime||TIMES[s.time],scheduleDate:getSlotDate(s),contentType:s.contentType,voiceId:"en-US-ChristopherNeural",targetDuration:55,script:s.script?.script||"",hook:s.script?.hook||"",title:s.script?.title||"",ytCaption:s.script?.ytCaption||"",keywords:[s.topic],footage:(s.footage||[]).map(c=>({id:c.id,url:c.url,duration:c.duration}))}));
     const blob=new Blob([JSON.stringify(jobs,null,2)],{type:"application/json"});
     const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download="week"+week.number+"_jobs.json";a.click();URL.revokeObjectURL(url);
   };
@@ -649,21 +654,51 @@ function ScheduleStage({week,updateWeek,prevWeeks}){
       </div>
     </div>}
 
-    <div style={{display:"flex",flexDirection:"column",gap:"3px"}}>
-      {DAYS.map((day,di)=>{
-        const daySlots=slots.filter(s=>s.day===di);
-        return <div key={day}>
-          <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",padding:"6px 0 3px",letterSpacing:"0.1em"}}>{day.toUpperCase()}</div>
-          {daySlots.map(slot=>{
-            const ct=CTYPES.find(c=>c.id===slot.contentType);const done=slot.scheduleStatus==="youtube_done";
-            return <div key={slot.id} style={{display:"flex",alignItems:"center",gap:"8px",padding:"7px 10px",background:done?"rgba(13,26,13,0.4)":"var(--card2)",border:"1px solid "+(done?"rgba(173,255,47,0.2)":"var(--border)"),borderRadius:"8px",marginBottom:"2px"}}>
-              <div style={{width:6,height:6,borderRadius:"50%",background:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--border2)",flexShrink:0}}/>
-              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",width:"44px",flexShrink:0}}>{TIMES[slot.time]}</div>
-              <div style={{flex:1,fontSize:"12px",color:done?"#ADFF2F":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:slot.topic}</div>
-              {ct&&<Tag color={done?"rgba(173,255,47,0.5)":ct.color}>{ct.label}</Tag>}
-              {done&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F",flexShrink:0}}>✓</span>}
-            </div>;
-          })}
+    {/* Schedule table with editable date + time per slot */}
+    <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"12px",overflow:"hidden"}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 110px 120px 80px",gap:"0",borderBottom:"1px solid var(--border)",padding:"8px 12px",background:"var(--bg3)"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>VIDEO</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>DATE</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>TIME</div>
+        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>STATUS</div>
+      </div>
+      {slots.map((slot,i)=>{
+        const ct=CTYPES.find(c=>c.id===slot.contentType);
+        const done=slot.scheduleStatus==="youtube_done";
+        // Build current date string for this slot
+        // week offset: next occurrence of that day
+        const getSlotDate=()=>{
+          const now=new Date();
+          const dayOffset=(slot.day-now.getDay()+7)%7||7;
+          const d=new Date(now);d.setDate(d.getDate()+dayOffset);
+          return d.toISOString().slice(0,10);
+        };
+        const slotDate=slot.scheduleDate||getSlotDate();
+        const slotTime=slot.scheduleTime||TIMES[slot.time];
+
+        const updateSlotSchedule=(field,val)=>{
+          updateWeek({slots:slots.map(s=>s.id===slot.id?{...s,[field]:val}:s)});
+        };
+
+        return <div key={slot.id} style={{display:"grid",gridTemplateColumns:"1fr 110px 120px 80px",gap:"0",padding:"7px 12px",borderBottom:i<slots.length-1?"1px solid var(--border)":"none",background:done?"rgba(13,26,13,0.3)":i%2===0?"var(--card)":"var(--card2)",alignItems:"center"}}>
+          {/* Title */}
+          <div style={{display:"flex",alignItems:"center",gap:"7px",minWidth:0}}>
+            <div style={{width:6,height:6,borderRadius:"50%",background:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--border2)",flexShrink:0}}/>
+            <div style={{fontSize:"12px",fontWeight:600,color:done?"#ADFF2F":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:(slot.topic||"Untitled")}</div>
+            {ct&&!done&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:ct.color,flexShrink:0}}>{ct.label}</span>}
+          </div>
+          {/* Date picker */}
+          <input type="date" value={slotDate} disabled={done}
+            onChange={e=>updateSlotSchedule("scheduleDate",e.target.value)}
+            style={{fontFamily:"Space Mono",fontSize:"10px",padding:"4px 6px",borderRadius:"6px",border:"1px solid "+(done?"transparent":"var(--input-border)"),background:done?"transparent":"var(--input-bg)",color:done?"var(--text4)":"var(--text)",cursor:done?"default":"text",width:"100%"}}/>
+          {/* Time picker */}
+          <select value={slotTime} disabled={done}
+            onChange={e=>updateSlotSchedule("scheduleTime",e.target.value)}
+            style={{fontFamily:"Space Mono",fontSize:"10px",padding:"4px 6px",borderRadius:"6px",border:"1px solid "+(done?"transparent":"var(--input-border)"),background:done?"transparent":"var(--input-bg)",color:done?"var(--text4)":"var(--text)",cursor:done?"default":"pointer",width:"100%"}}>
+            {["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM","9:00 PM"].map(t=><option key={t} value={t}>{t}</option>)}
+          </select>
+          {/* Status */}
+          <div style={{fontFamily:"Space Mono",fontSize:"9px",color:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--text4)",textAlign:"right"}}>{done?"✓ DONE":slot.videoUrl?"READY":"NO VIDEO"}</div>
         </div>;
       })}
     </div>
@@ -802,46 +837,119 @@ function WeekWorkspace({week,updateWeek,settings,ytToken,connectYT,serverOnline,
 function SetupOverlay({settings,setSettings,onClose,onSync}){
   const [local,setLocal]=useState({...settings});
   const [flash,setFlash]=useState(false);
+  const [ytOpen,setYtOpen]=useState(true);
+  const [igOpen,setIgOpen]=useState(false);
+  const [sbOpen,setSbOpen]=useState(false);
+  const [prefOpen,setPrefOpen]=useState(false);
+
   const set=(k,v)=>{const u={...local,[k]:v};setLocal(u);setSettings(u);setFlash(true);setTimeout(()=>setFlash(false),1500);};
-  const inp2={width:"100%",padding:"10px 14px",fontSize:"13px",borderRadius:"8px"};
-  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:300,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",overflowY:"auto"}}>
+  const inp={width:"100%",padding:"10px 14px",fontSize:"13px",borderRadius:"8px"};
+
+  const Section=({title,open,onToggle,accent,children})=>(
+    <div style={{border:"1px solid "+(open?accent||"#ADFF2F":"var(--border)"),borderRadius:"12px",overflow:"hidden",transition:"border .2s"}}>
+      <div onClick={onToggle} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",cursor:"pointer",background:open?"var(--bg3)":"var(--card)"}}>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:open?accent||"#ADFF2F":"var(--text3)",letterSpacing:"0.08em"}}>{title}</div>
+        <div style={{color:"var(--text4)",fontSize:"12px"}}>{open?"▲":"▼"}</div>
+      </div>
+      {open&&<div style={{padding:"14px 16px",borderTop:"1px solid var(--border)",display:"flex",flexDirection:"column",gap:"12px"}}>{children}</div>}
+    </div>
+  );
+
+  const Field=({label,k,type,hint})=>(
+    <div>
+      <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{label}</div>
+      <input type={type||"text"} value={local[k]||""} onChange={e=>set(k,e.target.value)} placeholder={hint} style={inp}/>
+    </div>
+  );
+
+  return <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:300,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"20px",overflowY:"auto"}}>
     <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"16px",width:"100%",maxWidth:"540px",padding:"20px"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
-        <h2 style={{fontWeight:800,fontSize:"20px"}}>Setup</h2>
+
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"18px"}}>
+        <h2 style={{fontWeight:800,fontSize:"18px"}}>Setup</h2>
         <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
-          {flash&&<span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>✓ Saved</span>}
-          {onSync&&<button onClick={()=>onSync(local)} style={{background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",color:"#ADFF2F"}}>↓ Sync Now</button>}
-          <button onClick={onClose} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"6px 12px",cursor:"pointer",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",color:"var(--text)"}}>Done</button>
+          {flash&&<span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F"}}>✓ Saved</span>}
+          {onSync&&<button onClick={()=>onSync(local)} style={{background:"rgba(13,26,13,0.8)",border:"1px solid rgba(173,255,47,0.3)",borderRadius:"8px",padding:"6px 14px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"12px",color:"#ADFF2F"}}>↓ Sync Now</button>}
+          <button onClick={onClose} style={{background:"var(--bg4)",border:"1px solid var(--border)",borderRadius:"8px",padding:"6px 14px",cursor:"pointer",fontFamily:"Syne",fontWeight:700,fontSize:"13px",color:"var(--text)"}}>Done</button>
         </div>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:"20px"}}>
-        {/* Buffer */}
-        <div><SL>BUFFER — YOUTUBE SCHEDULING</SL>
-          {[{k:"bufferToken",l:"Buffer Access Token",t:"password",h:"buffer.com → Settings → Developers → copy token"},{k:"bufferYTProfile",l:"Buffer YouTube Profile ID",t:"text",h:"Already set: 6a058c6e090476fb991b0ba5"},{k:"pexelsKey",l:"Pexels API Key",t:"password",h:"Free at pexels.com/api — for stock footage"}].map(f=><div key={f.k} style={{marginBottom:"10px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.l}</div><input type={f.t} value={local[f.k]||""} onChange={e=>set(f.k,e.target.value)} placeholder={f.h} style={inp2}/></div>)}
-        </div>
-        {/* YouTube Analytics */}
-        <div><SL>YOUTUBE ANALYTICS</SL>
-          <div style={{background:"var(--bg3)",border:"1px solid var(--border)",borderRadius:"8px",padding:"10px 12px",marginBottom:"10px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:1.8}}>
-            <div>Google Cloud Console → Enable YouTube Analytics API v2</div>
-            <div>Credentials → OAuth 2.0 → Web App → add <span style={{color:"#00CFFF"}}>https://randoomscroll.vercel.app</span></div>
-            <div>Copy Client ID → paste below</div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
+
+        {/* YouTube */}
+        <Section title="▶  YOUTUBE — via YouTube Data API" open={ytOpen} onToggle={()=>setYtOpen(!ytOpen)} accent="#FF2D2D">
+          <div style={{background:"rgba(255,45,45,0.06)",border:"1px solid rgba(255,45,45,0.2)",borderRadius:"8px",padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}>
+            <div>Authentication handled by <span style={{color:"#FF2D2D"}}>client_secrets.json</span> in pipeline folder</div>
+            <div>Browser login opens automatically on first upload run</div>
+            <div>Token saved to <span style={{color:"#FF2D2D"}}>youtube_token.json</span> — no re-auth needed</div>
           </div>
-          <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>YouTube Web Client ID</div>
-          <input type="text" value={local.youtubeClientId||""} onChange={e=>set("youtubeClientId",e.target.value)} placeholder="xxxx.apps.googleusercontent.com" style={inp2}/>
-        </div>
+          <Field label="YouTube Web Client ID (for Analytics in-app)" k="youtubeClientId" type="text" hint="xxxx.apps.googleusercontent.com"/>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:1.8,background:"var(--bg3)",borderRadius:"8px",padding:"8px 12px"}}>
+            <div>Google Cloud Console → YouTube Data API v3 → Credentials</div>
+            <div>OAuth 2.0 → Web App → add <span style={{color:"#00CFFF"}}>https://randoomscroll.vercel.app</span></div>
+          </div>
+          <Field label="Pexels API Key (stock footage)" k="pexelsKey" type="password" hint="Free at pexels.com/api"/>
+        </Section>
+
+        {/* Instagram */}
+        <Section title="📸  INSTAGRAM — via Buffer API" open={igOpen} onToggle={()=>setIgOpen(!igOpen)} accent="#E1306C">
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontSize:"13px",fontWeight:700,marginBottom:"2px"}}>Enable Instagram Reposting</div>
+              <div style={{fontSize:"12px",color:"var(--text4)"}}>Phase 2 — reposts Shorts to Instagram Reels via Buffer</div>
+            </div>
+            <button onClick={()=>set("instagramEnabled",!local.instagramEnabled)} style={{padding:"8px 16px",borderRadius:"8px",fontFamily:"Syne",fontWeight:800,fontSize:"12px",cursor:"pointer",border:"none",...(local.instagramEnabled?{background:"#E1306C",color:"#fff"}:{background:"linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045)",color:"#fff"})}}>
+              {local.instagramEnabled?"Enabled ✓":"Enable"}
+            </button>
+          </div>
+          {local.instagramEnabled&&<>
+            <div style={{background:"rgba(225,48,108,0.06)",border:"1px solid rgba(225,48,108,0.2)",borderRadius:"8px",padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}>
+              <div>1. buffer.com → Settings → Developers → copy Access Token</div>
+              <div>2. GET api.bufferapp.com/1/profiles.json?access_token=TOKEN</div>
+              <div>3. Find Instagram profile ID → paste below</div>
+            </div>
+            <Field label="Buffer Access Token" k="bufferToken" type="password" hint="buffer.com → Settings → Developers"/>
+            <Field label="Buffer Instagram Profile ID" k="bufferIGProfile" type="text" hint="From profiles.json API call"/>
+          </>}
+        </Section>
+
         {/* Supabase */}
-        <div><SL>SUPABASE SYNC</SL>
-          {[{k:"supabaseUrl",l:"Supabase Project URL",t:"text",h:"https://xxxxxxxxxxxx.supabase.co"},{k:"supabaseKey",l:"Supabase Anon Key",t:"password",h:"Supabase → Settings → API → anon public"},{k:"channelKey",l:"Channel Key",t:"text",h:"Your password e.g. rand00mscroll-2025"}].map(f=><div key={f.k} style={{marginBottom:"10px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>{f.l}</div><input type={f.t} value={local[f.k]||""} onChange={e=>set(f.k,e.target.value)} placeholder={f.h} style={inp2}/></div>)}
-        </div>
-        {/* Prefs */}
-        <div><SL>PREFERENCES</SL>
-          <div style={{marginBottom:"10px"}}><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>Posting Times</div><div style={{display:"flex",gap:"8px"}}>{local.postingTimes.map((t,i)=><input key={i} type="time" value={t} onChange={e=>{const tt=[...local.postingTimes];tt[i]=e.target.value;set("postingTimes",tt);}} style={{padding:"8px 10px",fontSize:"13px",fontFamily:"Space Mono",borderRadius:"8px"}}/>)}</div></div>
-          <div><div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>Voice</div><select value={local.voiceId} onChange={e=>set("voiceId",e.target.value)} style={{...inp2}}>{["en-US-ChristopherNeural","en-US-AriaNeural","en-US-GuyNeural","en-GB-RyanNeural","en-IN-NeerjaNeural"].map(v=><option key={v} value={v}>{v}</option>)}</select></div>
-        </div>
+        <Section title="☁  SUPABASE — cross-device sync" open={sbOpen} onToggle={()=>setSbOpen(!sbOpen)} accent="#00CFFF">
+          <Field label="Supabase Project URL" k="supabaseUrl" type="text" hint="https://xxxxxxxxxxxx.supabase.co"/>
+          <Field label="Supabase Anon Key" k="supabaseKey" type="password" hint="Supabase → Settings → API → anon public"/>
+          <Field label="Channel Key (your password)" k="channelKey" type="text" hint="e.g. rand00mscroll-2025"/>
+          <div style={{background:"var(--bg3)",borderRadius:"8px",padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}>
+            <div style={{color:"#00CFFF",marginBottom:"4px"}}>ONE-TIME SQL IN SUPABASE</div>
+            <div>create table r00m_data (channel_key text primary key, weeks jsonb, insight jsonb, settings jsonb, updated_at timestamptz default now());</div>
+            <div>alter table r00m_data enable row level security;</div>
+            <div>create policy "open" on r00m_data for all using (true) with check (true);</div>
+          </div>
+        </Section>
+
+        {/* Preferences */}
+        <Section title="⚙  PREFERENCES" open={prefOpen} onToggle={()=>setPrefOpen(!prefOpen)} accent="var(--text4)">
+          <div>
+            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"6px"}}>Daily Posting Times</div>
+            <div style={{display:"flex",gap:"8px"}}>{local.postingTimes.map((t,i)=><input key={i} type="time" value={t} onChange={e=>{const tt=[...local.postingTimes];tt[i]=e.target.value;set("postingTimes",tt);}} style={{padding:"8px 10px",fontSize:"13px",fontFamily:"Space Mono",borderRadius:"8px"}}/>)}</div>
+          </div>
+          <div>
+            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>Voiceover</div>
+            <select value={local.voiceId} onChange={e=>set("voiceId",e.target.value)} style={{...inp}}>
+              {["en-US-ChristopherNeural","en-US-AriaNeural","en-US-GuyNeural","en-GB-RyanNeural","en-IN-NeerjaNeural"].map(v=><option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:"4px"}}>Target Duration (seconds)</div>
+            <input type="number" value={local.targetDuration} min={30} max={90} onChange={e=>set("targetDuration",+e.target.value)} style={{...inp,width:"100px"}}/>
+          </div>
+        </Section>
+
       </div>
     </div>
   </div>;
 }
+
 
 // ── Aggregation Views ─────────────────────────────────────────
 function AggregateView({weeks,period}){
