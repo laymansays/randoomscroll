@@ -654,51 +654,55 @@ function ScheduleStage({week,updateWeek,prevWeeks}){
       </div>
     </div>}
 
-    {/* Schedule table with editable date + time per slot */}
-    <div style={{background:"var(--card)",border:"1px solid var(--border)",borderRadius:"12px",overflow:"hidden"}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 110px 120px 80px",gap:"0",borderBottom:"1px solid var(--border)",padding:"8px 12px",background:"var(--bg3)"}}>
-        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>VIDEO</div>
-        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>DATE</div>
-        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>TIME</div>
-        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:"0.1em"}}>STATUS</div>
-      </div>
-      {slots.map((slot,i)=>{
-        const ct=CTYPES.find(c=>c.id===slot.contentType);
-        const done=slot.scheduleStatus==="youtube_done";
-        // Build current date string for this slot
-        // week offset: next occurrence of that day
-        const getSlotDate=()=>{
-          const now=new Date();
-          const dayOffset=(slot.day-now.getDay()+7)%7||7;
-          const d=new Date(now);d.setDate(d.getDate()+dayOffset);
-          return d.toISOString().slice(0,10);
-        };
-        const slotDate=slot.scheduleDate||getSlotDate();
-        const slotTime=slot.scheduleTime||TIMES[slot.time];
+    {/* Slot list with inline date + time pickers */}
+    <div style={{display:"flex",flexDirection:"column",gap:"4px"}}>
+      {DAYS.map((day,di)=>{
+        const daySlots=slots.filter(s=>s.day===di);
+        if(!daySlots.length) return null;
+        return <div key={day}>
+          <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",padding:"8px 0 4px",letterSpacing:"0.1em"}}>{day.toUpperCase()}</div>
+          {daySlots.map(slot=>{
+            const ct=CTYPES.find(c=>c.id===slot.contentType);
+            const done=slot.scheduleStatus==="youtube_done";
+            const getDefaultDate=()=>{
+              const now=new Date();
+              const ahead=(slot.day-now.getDay()+7)%7||7;
+              const d=new Date(now);d.setDate(d.getDate()+ahead);
+              return d.toISOString().slice(0,10);
+            };
+            const slotDate=slot.scheduleDate||getDefaultDate();
+            const slotTime=slot.scheduleTime||TIMES[slot.time];
+            const upd=(f,v)=>updateWeek({slots:slots.map(s=>s.id===slot.id?{...s,[f]:v}:s)});
 
-        const updateSlotSchedule=(field,val)=>{
-          updateWeek({slots:slots.map(s=>s.id===slot.id?{...s,[field]:val}:s)});
-        };
-
-        return <div key={slot.id} style={{display:"grid",gridTemplateColumns:"1fr 110px 120px 80px",gap:"0",padding:"7px 12px",borderBottom:i<slots.length-1?"1px solid var(--border)":"none",background:done?"rgba(13,26,13,0.3)":i%2===0?"var(--card)":"var(--card2)",alignItems:"center"}}>
-          {/* Title */}
-          <div style={{display:"flex",alignItems:"center",gap:"7px",minWidth:0}}>
-            <div style={{width:6,height:6,borderRadius:"50%",background:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--border2)",flexShrink:0}}/>
-            <div style={{fontSize:"12px",fontWeight:600,color:done?"#ADFF2F":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:(slot.topic||"Untitled")}</div>
-            {ct&&!done&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:ct.color,flexShrink:0}}>{ct.label}</span>}
-          </div>
-          {/* Date picker */}
-          <input type="date" value={slotDate} disabled={done}
-            onChange={e=>updateSlotSchedule("scheduleDate",e.target.value)}
-            style={{fontFamily:"Space Mono",fontSize:"10px",padding:"4px 6px",borderRadius:"6px",border:"1px solid "+(done?"transparent":"var(--input-border)"),background:done?"transparent":"var(--input-bg)",color:done?"var(--text4)":"var(--text)",cursor:done?"default":"text",width:"100%"}}/>
-          {/* Time picker */}
-          <select value={slotTime} disabled={done}
-            onChange={e=>updateSlotSchedule("scheduleTime",e.target.value)}
-            style={{fontFamily:"Space Mono",fontSize:"10px",padding:"4px 6px",borderRadius:"6px",border:"1px solid "+(done?"transparent":"var(--input-border)"),background:done?"transparent":"var(--input-bg)",color:done?"var(--text4)":"var(--text)",cursor:done?"default":"pointer",width:"100%"}}>
-            {["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM","9:00 PM"].map(t=><option key={t} value={t}>{t}</option>)}
-          </select>
-          {/* Status */}
-          <div style={{fontFamily:"Space Mono",fontSize:"9px",color:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--text4)",textAlign:"right"}}>{done?"✓ DONE":slot.videoUrl?"READY":"NO VIDEO"}</div>
+            return <div key={slot.id} style={{background:done?"rgba(13,26,13,0.4)":"var(--card2)",border:"1px solid "+(done?"rgba(173,255,47,0.2)":"var(--border)"),borderRadius:"10px",padding:"10px 12px",marginBottom:"3px"}}>
+              {/* Row 1: dot + title + type tag */}
+              <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:done?"0":"8px"}}>
+                <div style={{width:7,height:7,borderRadius:"50%",background:done?"#ADFF2F":slot.videoUrl?"#FF6B35":"var(--border2)",flexShrink:0}}/>
+                <div style={{flex:1,fontSize:"13px",fontWeight:700,color:done?"#ADFF2F":"var(--text)",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{slot.script?slot.script.title:(slot.topic||"Untitled")}</div>
+                {ct&&<Tag color={done?"rgba(173,255,47,0.5)":ct.color}>{ct.label}</Tag>}
+                {done&&<span style={{fontFamily:"Space Mono",fontSize:"9px",color:"#ADFF2F",flexShrink:0}}>✓ Scheduled</span>}
+              </div>
+              {/* Row 2: date + time pickers (only if not done) */}
+              {!done&&<div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>DATE</div>
+                  <input type="date" value={slotDate}
+                    onChange={e=>upd("scheduleDate",e.target.value)}
+                    style={{width:"100%",fontFamily:"Space Mono",fontSize:"12px",padding:"6px 8px",borderRadius:"7px",border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)"}}/>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>TIME</div>
+                  <select value={slotTime} onChange={e=>upd("scheduleTime",e.target.value)}
+                    style={{width:"100%",fontFamily:"Space Mono",fontSize:"12px",padding:"6px 8px",borderRadius:"7px",border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)"}}>
+                    {["7:00 AM","8:00 AM","9:00 AM","10:00 AM","11:00 AM","12:00 PM","1:00 PM","2:00 PM","3:00 PM","4:00 PM","5:00 PM","6:00 PM","7:00 PM","8:00 PM","9:00 PM"].map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div style={{flexShrink:0,paddingTop:"16px"}}>
+                  <div style={{fontFamily:"Space Mono",fontSize:"9px",color:slot.videoUrl?"#FF6B35":"var(--text4)"}}>{slot.videoUrl?"READY":"NO VID"}</div>
+                </div>
+              </div>}
+            </div>;
+          })}
         </div>;
       })}
     </div>
