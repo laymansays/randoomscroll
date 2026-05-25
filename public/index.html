@@ -953,7 +953,27 @@ function App(){
   const activeWeekIdx=activeTab.startsWith("w")?parseInt(activeTab.slice(1)):-1;
   const isAggView=["month","quarter","year"].includes(activeTab);
 
+  // Analytics ready + next week nudge
+  const analyticsAlerts = weeks.filter(w=>{
+    if(!w.scheduledAt||!w.locked) return false;
+    const daysSince=(Date.now()-new Date(w.scheduledAt).getTime())/(1000*60*60*24);
+    const scheduled=(w.slots||[]).filter(s=>s.scheduleStatus==="youtube_done").length;
+    return daysSince>=3&&scheduled>0&&!w.analytics;
+  });
+  const nextUnplanned=weeks.find(w=>!w.locked&&!w.niche);
+
   return <div style={{minHeight:"100vh",background:"var(--bg)"}}>
+    {/* Analytics alerts — shown above topbar as a sticky banner */}
+    {analyticsAlerts.map(w=><div key={w.id} style={{background:"rgba(0,207,255,0.12)",borderBottom:"1px solid rgba(0,207,255,0.3)",padding:"10px 16px",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:"#00CFFF",animation:"pulse 2s infinite",flexShrink:0}}/>
+      <div style={{flex:1,fontFamily:"Space Mono",fontSize:"11px",color:"#00CFFF"}}>WEEK {w.number} ANALYTICS READY — Connect YouTube in Stage 6 to see performance</div>
+      <button onClick={()=>setActiveTab("w"+(w.number-1))} style={{background:"rgba(0,207,255,0.15)",border:"1px solid rgba(0,207,255,0.4)",borderRadius:"6px",padding:"4px 10px",color:"#00CFFF",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer"}}>View →</button>
+    </div>)}
+    {analyticsAlerts.length>0&&nextUnplanned&&<div style={{background:"rgba(173,255,47,0.08)",borderBottom:"1px solid rgba(173,255,47,0.25)",padding:"10px 16px",display:"flex",alignItems:"center",gap:"10px",flexWrap:"wrap"}}>
+      <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite",flexShrink:0}}/>
+      <div style={{flex:1,fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>TIME TO PLAN WEEK {nextUnplanned.number} — Analytics are in, engine ready to optimise next week</div>
+      <button onClick={()=>{setActiveTab("w"+(nextUnplanned.number-1));}} style={{background:"rgba(173,255,47,0.15)",border:"1px solid rgba(173,255,47,0.4)",borderRadius:"6px",padding:"4px 10px",color:"#ADFF2F",fontFamily:"Syne",fontWeight:700,fontSize:"11px",cursor:"pointer"}}>Plan Week {nextUnplanned.number} →</button>
+    </div>}
     {/* Topbar */}
     <div style={{position:"sticky",top:0,zIndex:200,background:"var(--topbar)",backdropFilter:"blur(14px)",WebkitBackdropFilter:"blur(14px)",borderBottom:"1px solid var(--border)",padding:"8px 12px",display:"flex",alignItems:"center",gap:"6px"}}>
       {/* Brand */}
