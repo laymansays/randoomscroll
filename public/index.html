@@ -686,9 +686,13 @@ function ScheduleStage({week,updateWeek,prevWeeks}){
               {!done&&<div style={{display:"flex",gap:"8px",alignItems:"center"}}>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>DATE</div>
-                  <input type="date" value={slotDate}
-                    onChange={e=>upd("scheduleDate",e.target.value)}
-                    style={{width:"100%",fontFamily:"Space Mono",fontSize:"12px",padding:"6px 8px",borderRadius:"7px",border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)"}}/>
+                  <div style={{position:"relative"}}>
+                    <input type="date" value={slotDate}
+                      onClick={e=>e.target.showPicker&&e.target.showPicker()}
+                      onChange={e=>upd("scheduleDate",e.target.value)}
+                      style={{width:"100%",fontFamily:"Space Mono",fontSize:"12px",padding:"6px 8px",borderRadius:"7px",border:"1px solid var(--input-border)",background:"var(--input-bg)",color:"var(--text)",cursor:"pointer",WebkitAppearance:"none",colorScheme:"dark"}}/>
+                    <span onClick={e=>{const inp=e.currentTarget.previousSibling;inp.showPicker&&inp.showPicker();}} style={{position:"absolute",right:"8px",top:"50%",transform:"translateY(-50%)",fontSize:"14px",cursor:"pointer",pointerEvents:"all"}}>📅</span>
+                  </div>
                 </div>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:"3px"}}>TIME</div>
