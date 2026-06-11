@@ -991,7 +991,7 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
         {/* Football Engine */}
         <Section title="⚽  FOOTBALL ENGINE" open={hfOpen} onToggle={()=>setHfOpen(!hfOpen)} accent="#ADFF2F">
           <div style={{background:"rgba(173,255,47,0.04)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:8,padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}>
-            <div>Pexels is free. OpenAI DALL-E 3 generates AI images matched to your script (~$0.04/image).</div>
+            <div>Pexels is free. OpenAI OpenAI GPT Image generates AI images matched to your script (~$0.04/image).</div>
             <div>Get football-data.org key free at football-data.org/client/register</div>
           </div>
 
@@ -1017,7 +1017,7 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
           {(local.visualSource||"pexels")==="dalle3"&&<>
             <Field label="OpenAI API Key" k="openaiKey" type="password" hint="platform.openai.com → API Keys → Create new secret key"/>
             <div style={{background:"rgba(16,163,127,0.06)",border:"1px solid rgba(16,163,127,0.2)",borderRadius:8,padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:1.8}}>
-              <div style={{color:"#10a37f",fontWeight:700,marginBottom:4}}>DALL-E 3 RULES BAKED IN</div>
+              <div style={{color:"#10a37f",fontWeight:700,marginBottom:4}}>GPT IMAGE RULES BAKED IN</div>
               <div>✓ No real player names in image prompts</div>
               <div>✓ Describes scenes, lighting, emotion — not people</div>
               <div>✓ Cinematic composition per scene</div>
@@ -1296,7 +1296,7 @@ function FootballTab({settings}){
         {/* Visual source indicator */}
         <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:14}}>
           Visuals: {dalleReady
-            ? <span style={{display:"inline-block",padding:"2px 7px",borderRadius:3,background:"#10a37f",color:"#fff",fontSize:"9px",marginLeft:4}}>DALL-E 3</span>
+            ? <span style={{display:"inline-block",padding:"2px 7px",borderRadius:3,background:"#10a37f",color:"#fff",fontSize:"9px",marginLeft:4}}>GPT Image</span>
             : <><span className="px-badge">PEXELS</span><span style={{marginLeft:6}}>— switch to OpenAI in ⚙️ Setup for AI images</span></>}
         </div>
 
@@ -1396,9 +1396,9 @@ function FootballTab({settings}){
 
     {/* Stage 3: Visuals */}
     <div className={`fb-stage ${openStage===3?"active":""}`}>
-      <FbHdr n={3} label={dalleReady?"Get Visuals (DALL-E 3 AI Images)":"Get Visuals (Pexels)"} done={visuals.length>0}/>
+      <FbHdr n={3} label={dalleReady?"Get Visuals (GPT Image AI)":"Get Visuals (Pexels)"} done={visuals.length>0}/>
       {openStage===3&&<div className="fb-stage-body">
-        <Banner st={visualStatus} msgs={[dalleReady?"Generating AI images via DALL-E 3… (~5s per scene)":"Fetching Pexels clips…",visuals.length+" visual assets ready","Visual fetch failed — check API key in Setup ⚙️"]}/>
+        <Banner st={visualStatus} msgs={[dalleReady?"Generating AI images via GPT Image… (~5s per scene)":"Fetching Pexels clips…",visuals.length+" visual assets ready","Visual fetch failed — check API key in Setup ⚙️"]}/>
         {visuals.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8,marginBottom:14}}>
           {visuals.map((v,i)=><div key={i} style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",aspectRatio:"9/16",background:"var(--bg3)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
             {v.thumbnail_url?<img src={v.thumbnail_url} alt={v.keyword} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.2rem"}}>🎬</span>}
