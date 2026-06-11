@@ -26,6 +26,35 @@ textarea{resize:vertical}
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:var(--bg3)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+/* ── Football Tab ── */
+.fb-stage{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:10px;transition:border .3s}
+.fb-stage.active{border-color:rgba(173,255,47,0.4)}
+.fb-stage-hdr{display:flex;align-items:center;gap:12px;padding:14px 16px;cursor:pointer}
+.fb-stage-hdr:hover{background:var(--bg3)}
+.fb-stage-num{width:24px;height:24px;border-radius:50%;border:1px solid #ADFF2F;background:rgba(173,255,47,0.1);display:flex;align-items:center;justify-content:center;font-family:'Space Mono',monospace;font-size:11px;color:#ADFF2F;font-weight:700;flex-shrink:0}
+.fb-stage-num.done{background:#ADFF2F;color:#08080E;border-color:#ADFF2F}
+.fb-stage-body{border-top:1px solid var(--border);padding:16px}
+.fb-mode-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;width:fit-content;margin-bottom:14px}
+.fb-mode-btn{padding:7px 16px;border:none;background:var(--card);color:var(--text4);font-family:'Stardos Stencil','Arial Black',sans-serif;font-size:12px;cursor:pointer;transition:all .15s}
+.fb-mode-btn.active{background:#ADFF2F;color:#08080E}
+.fb-chip{padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text4);font-family:'Space Mono',monospace;font-size:10px;cursor:pointer;transition:all .15s}
+.fb-chip:hover{border-color:#ADFF2F;color:#ADFF2F}
+.fb-chip.active{background:#ADFF2F;border-color:#ADFF2F;color:#08080E}
+.fb-sel{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-family:'Space Mono',monospace;font-size:12px;cursor:pointer}
+.fb-sel:focus{outline:none;border-color:#ADFF2F}
+.fb-inp{width:100%;padding:9px 12px;border:1px solid var(--border);border-radius:8px;background:var(--input-bg);color:var(--text);font-family:'Space Mono',monospace;font-size:12px;box-sizing:border-box}
+.fb-inp:focus{outline:none;border-color:#ADFF2F}
+.fb-inp::placeholder{color:var(--text4)}
+.fb-label{font-family:'Space Mono',monospace;font-size:10px;color:var(--text4);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px}
+.fb-banner{padding:10px 14px;border-radius:8px;font-family:'Space Mono',monospace;font-size:11px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.fb-banner.info{background:rgba(0,207,255,0.08);border:1px solid rgba(0,207,255,0.25);color:#00CFFF}
+.fb-banner.ok{background:rgba(173,255,47,0.08);border:1px solid rgba(173,255,47,0.25);color:#ADFF2F}
+.fb-banner.err{background:rgba(255,45,107,0.08);border:1px solid rgba(255,45,107,0.25);color:#FF2D6B}
+.hf-badge{display:inline-block;padding:2px 7px;border-radius:3px;background:#a855f7;color:#fff;font-family:'Space Mono',monospace;font-size:9px;margin-left:4px}
+.px-badge{display:inline-block;padding:2px 7px;border-radius:3px;background:#05a081;color:#fff;font-family:'Space Mono',monospace;font-size:9px;margin-left:4px}
+.match-card{border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;background:var(--card2);display:flex;align-items:center;gap:12px}
+.match-card.upset{border-color:#FF2D6B;background:rgba(255,45,107,0.04)}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#FF2D6B;margin-right:6px;animation:pulse 1.5s infinite}
 </style>
 </head>
 <body class="light">
@@ -38,6 +67,18 @@ const {useState, useEffect, useRef} = React;
 
 // ── Constants ─────────────────────────────────────────────────
 const uid = () => Math.random().toString(36).slice(2,9);
+
+// ── Football Topics Taxonomy ─────────────────────────────────
+const FOOTBALL_TOPICS = {
+  "🏆 Greatest Moments":["Best Goals in World Cup History","Most Dramatic Last-Minute Winners","Greatest Upsets of All Time","Best Penalty Shootouts Ever","Most Iconic World Cup Finals","Best Hat-Tricks in World Cup History"],
+  "⭐ Players":["Best Strikers of All Time","Best Goalkeepers Ever","Best Defenders in History","Most Underrated Players Ever","Players Who Never Won the World Cup","One-Season Wonders","Players Who Defined an Era"],
+  "😤 Controversies":["Worst Referee Decisions Ever","FIFA's Most Corrupt Decisions","Biggest Cheating Scandals in Football","Worst Red Cards in History","Hand of God and Other Controversies"],
+  "📉 Failures and Disasters":["Worst Collapses in Football History","Most Embarrassing World Cup Exits","Players Who Ruined Big Moments","Teams That Should Have Won But Didn't"],
+  "🔥 Rivalries":["Greatest International Rivalries","Best Group Stage Clashes Ever","Teams That Always Disappoint at World Cups"],
+  "📊 Facts and Records":["Records That Will Never Be Broken","Weirdest FIFA Rules Explained","Fastest Goals Most Cards Wildest Stats","Countries With Shocking World Cup Records"],
+  "🌍 World Cup 2026 Reactive":["Today's Biggest Upset","Player of the Tournament So Far","Who Will Win the World Cup?","Most Surprising Team of the Tournament","Controversial Call That Changed Everything"],
+};
+const FOOTBALL_STYLES = ["shocking facts","ragebait","clickbait","cliffhanger","documentary-lite","brainrot","storytime","listicle"];
 const DAYS  = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 const TIMES = ["7:00 AM","1:00 PM","6:00 PM"];
 const CTYPES = [
@@ -75,7 +116,7 @@ function makeSlots(types, topics) {
 
 const initWeek = (number) => ({id:uid(),number,niche:"",topics:["","",""],contentTypes:["cliffhanger","explanatory"],slots:[],analytics:null,comparison:null,evolvedPrompt:"",locked:false,scheduled:false,scheduledAt:null});
 
-const INIT_SETTINGS = {bufferToken:"",bufferYTProfile:"6a058c6e090476fb991b0ba5",pexelsKey:"",youtubeClientId:"",postingTimes:["07:00","13:00","18:00"],voiceId:"en-US-ChristopherNeural",targetDuration:55,instagramEnabled:false,bufferIGProfile:"",supabaseUrl:"",supabaseKey:"",channelKey:""};
+const INIT_SETTINGS = {bufferToken:"",bufferYTProfile:"6a058c6e090476fb991b0ba5",pexelsKey:"",youtubeClientId:"",postingTimes:["07:00","13:00","18:00"],voiceId:"en-US-ChristopherNeural",targetDuration:55,instagramEnabled:false,bufferIGProfile:"",supabaseUrl:"",supabaseKey:"",channelKey:"",higgsfieldKey:"",higgsfieldEnabled:false,higgsfieldModel:"cinematic_studio_video_v2",footballDataKey:"",footballVideosPerDay:2};
 
 // ── Supabase ──────────────────────────────────────────────────
 async function sbLoad(url,key,ch){if(!url||!key||!ch)return null;try{const r=await fetch(url+"/rest/v1/r00m_data?channel_key=eq."+encodeURIComponent(ch)+"&select=*",{headers:{apikey:key,Authorization:"Bearer "+key}});const d=await r.json();return Array.isArray(d)&&d[0]?d[0]:null;}catch{return null;}}
@@ -871,6 +912,7 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
   const [flash,setFlash]=useState(false);
   const [ytOpen,setYtOpen]=useState(true);
   const [igOpen,setIgOpen]=useState(false);
+  const [hfOpen,setHfOpen]=useState(false);
   const [sbOpen,setSbOpen]=useState(false);
   const [prefOpen,setPrefOpen]=useState(false);
 
@@ -946,6 +988,41 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
           </>}
         </Section>
 
+        {/* Football Engine */}
+        <Section title="⚽  FOOTBALL ENGINE" open={hfOpen} onToggle={()=>setHfOpen(!hfOpen)} accent="#ADFF2F">
+          <div style={{background:"rgba(173,255,47,0.04)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:8,padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}>
+            <div>Pexels is used by default (free). Enable Higgsfield for AI visuals.</div>
+            <div>Get football-data.org key free at football-data.org/client/register</div>
+          </div>
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+              <div>
+                <div style={{fontSize:"13px",fontWeight:700,marginBottom:2}}>Enable Higgsfield AI Visuals</div>
+                <div style={{fontSize:"11px",color:"var(--text4)"}}>Uses credits. Pexels used when off.</div>
+              </div>
+              <button onClick={()=>set("higgsfieldEnabled",!local.higgsfieldEnabled)} style={{padding:"7px 14px",borderRadius:8,border:"none",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"11px",cursor:"pointer",background:local.higgsfieldEnabled?"#ADFF2F":"var(--bg4)",color:local.higgsfieldEnabled?"#08080E":"var(--text4)"}}>
+                {local.higgsfieldEnabled?"ON ✓":"OFF"}
+              </button>
+            </div>
+          </div>
+          <Field label="Higgsfield API Key" k="higgsfieldKey" type="password" hint="Get at higgsfield.ai → Account → API Keys"/>
+          <div>
+            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:4}}>Video Model</div>
+            <select value={local.higgsfieldModel||"cinematic_studio_video_v2"} onChange={e=>set("higgsfieldModel",e.target.value)} style={{width:"100%",padding:"10px 14px",fontSize:"13px",borderRadius:8}}>
+              <option value="cinematic_studio_video_v2">Cinema Studio v2 — action genre (recommended)</option>
+              <option value="kling3_0">Kling 3.0 — cinematic multi-shot</option>
+              <option value="seedance_2_0">Seedance 2.0 — reference-driven</option>
+            </select>
+          </div>
+          <Field label="Football-Data.org API Key (free)" k="footballDataKey" type="text" hint="football-data.org/client/register — enables Match Monitor"/>
+          <div>
+            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:6}}>Football Videos Per Day</div>
+            <div style={{display:"flex",gap:6}}>
+              {[1,2,3,4,5].map(n=><button key={n} onClick={()=>set("footballVideosPerDay",n)} style={{padding:"6px 12px",borderRadius:6,border:"1px solid var(--border)",background:(local.footballVideosPerDay||2)===n?"#ADFF2F":"transparent",color:(local.footballVideosPerDay||2)===n?"#08080E":"var(--text4)",fontFamily:"Space Mono",fontSize:"12px",cursor:"pointer"}}>{n}</button>)}
+            </div>
+          </div>
+        </Section>
+
         {/* Supabase */}
         <Section title="☁  SUPABASE — cross-device sync" open={sbOpen} onToggle={()=>setSbOpen(!sbOpen)} accent="#00CFFF">
           <Field label="Supabase Project URL" k="supabaseUrl" type="text" hint="https://xxxxxxxxxxxx.supabase.co"/>
@@ -982,6 +1059,321 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
   </div>;
 }
 
+
+// ── Football Tab ──────────────────────────────────────────────
+function FootballTab({settings}){
+  const [mode,setMode]=useState("evergreen");
+  const [cat,setCat]=useState("");
+  const [topic,setTopic]=useState("");
+  const [custom,setCustom]=useState("");
+  const [style,setStyle]=useState("shocking facts");
+  const [ctx,setCtx]=useState("");
+  const [openStage,setOpenStage]=useState(1);
+  const [scriptStatus,setScriptStatus]=useState("idle");
+  const [script,setScript]=useState(null);
+  const [visualStatus,setVisualStatus]=useState("idle");
+  const [visuals,setVisuals]=useState([]);
+  const [videoStatus,setVideoStatus]=useState("idle");
+  const [slot,setSlot]=useState(null);
+  const [matchStatus,setMatchStatus]=useState("idle");
+  const [matches,setMatches]=useState([]);
+  const [upsets,setUpsets]=useState([]);
+  const [modal,setModal]=useState(false);
+
+  const activeTopic = custom.trim() ? custom.trim() : topic;
+  const hfReady = settings.higgsfieldEnabled && settings.higgsfieldKey && settings.higgsfieldKey.length > 8;
+
+  const tog = (n) => setOpenStage(s => s===n ? 0 : n);
+
+  const FbHdr = ({n,label,done})=>(
+    <div className="fb-stage-hdr" onClick={()=>tog(n)}>
+      <div className={`fb-stage-num ${done?"done":""}`}>{done?"✓":n}</div>
+      <div style={{flex:1,fontWeight:700,fontSize:"14px"}}>{label}</div>
+      <div style={{color:"var(--text4)",fontSize:"12px"}}>{openStage===n?"▲":"▼"}</div>
+    </div>
+  );
+
+  const Banner = ({st,msgs})=>{
+    if(!st||st==="idle") return null;
+    const cls = st==="loading"?"info":st==="done"?"ok":"err";
+    return <div className={`fb-banner ${cls}`}>
+      {st==="loading"&&<Spinner size={12}/>}
+      {st==="loading"?msgs[0]:st==="done"?msgs[1]:msgs[2]}
+    </div>;
+  };
+
+  async function doScript(){
+    if(!activeTopic) return;
+    setScriptStatus("loading"); setScript(null);
+    try{
+      const r=await fetch(SERVER+"/football/script",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:activeTopic,content_style:style,mode,match_context:ctx,higgsfield_enabled:hfReady})});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setScript(d); setScriptStatus("done"); setOpenStage(2);
+    }catch(e){setScriptStatus("err");}
+  }
+
+  async function doVisuals(){
+    if(!script) return;
+    setVisualStatus("loading"); setVisuals([]);
+    try{
+      const r=await fetch(SERVER+"/football/visuals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({script,higgsfield_enabled:hfReady,pexels_api_key:settings.pexelsKey})});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setVisuals(d.visuals||[]); setVisualStatus("done"); setOpenStage(3);
+    }catch(e){setVisualStatus("err");}
+  }
+
+  async function doAssemble(){
+    if(!visuals.length) return;
+    setVideoStatus("loading");
+    try{
+      const r=await fetch(SERVER+"/football/assemble",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({script,visuals,mode})});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setSlot(d); setVideoStatus("done"); setOpenStage(4);
+    }catch(e){setVideoStatus("err");}
+  }
+
+  async function doSchedule(){
+    if(!slot||!slot.has_video) return;
+    try{
+      const r=await fetch(SERVER+"/football/schedule",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slot})});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setSlot(s=>({...s,scheduled:true,publish_at:d.publish_at}));
+    }catch(e){console.error("Schedule failed",e);}
+  }
+
+  async function doMatches(){
+    setMatchStatus("loading");
+    try{
+      const r=await fetch(SERVER+"/football/matches");
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setMatches(d.matches||[]); setUpsets(d.upsets||[]); setMatchStatus("done");
+    }catch(e){setMatchStatus("err");}
+  }
+
+  function triggerFromUpset(u){
+    setCustom(u.team1+" vs "+u.team2+" — Shock "+u.score+" Result");
+    setCtx(u.team1+" beat "+u.team2+" "+u.score+" in "+u.round+". "+u.upset_reason);
+    setMode("reactive"); setOpenStage(1);
+    window.scrollTo({top:0,behavior:"smooth"});
+  }
+
+  return <div className="fade-up" style={{paddingBottom:60}}>
+
+    {/* Stage 1: Topic */}
+    <div className={`fb-stage ${openStage===1?"active":""}`}>
+      <FbHdr n={1} label="Pick Topic" done={!!activeTopic}/>
+      {openStage===1&&<div className="fb-stage-body">
+
+        {/* Mode */}
+        <div className="fb-label">Video Mode</div>
+        <div className="fb-mode-toggle" style={{marginBottom:14}}>
+          <button className={`fb-mode-btn ${mode==="evergreen"?"active":""}`} onClick={()=>setMode("evergreen")}>🌲 Evergreen</button>
+          <button className={`fb-mode-btn ${mode==="reactive"?"active":""}`} onClick={()=>setMode("reactive")}>⚡ Match Reactive</button>
+        </div>
+
+        {mode==="reactive"&&<>
+          <div className="fb-label">Match Context</div>
+          <input className="fb-inp" style={{marginBottom:14}} placeholder="e.g. Morocco 2–0 France, Group C, 89th min winner" value={ctx} onChange={e=>setCtx(e.target.value)}/>
+        </>}
+
+        {/* Category + Topic */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          <div>
+            <div className="fb-label">Category</div>
+            <select className="fb-sel" value={cat} onChange={e=>{setCat(e.target.value);setTopic("");setCustom("");}}>
+              <option value="">— Category —</option>
+              {Object.keys(FOOTBALL_TOPICS).map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <div className="fb-label">Topic</div>
+            <select className="fb-sel" value={topic} disabled={!cat} onChange={e=>{setTopic(e.target.value);setCustom("");}}>
+              <option value="">— Topic —</option>
+              {cat&&FOOTBALL_TOPICS[cat].map(t=><option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Custom topic */}
+        <div className="fb-label">Or type your own</div>
+        <input className="fb-inp" style={{marginBottom:14}} placeholder="e.g. Why Mbappe always fails in finals" value={custom} onChange={e=>{setCustom(e.target.value);setTopic("");}}/>
+
+        {/* Style */}
+        <div className="fb-label" style={{marginBottom:8}}>Content Style</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+          {FOOTBALL_STYLES.map(s=><button key={s} className={`fb-chip ${style===s?"active":""}`} onClick={()=>setStyle(s)}>{s}</button>)}
+        </div>
+
+        {/* Active topic preview */}
+        {activeTopic&&<div style={{padding:"8px 12px",background:"rgba(173,255,47,0.06)",border:"1px solid rgba(173,255,47,0.2)",borderRadius:8,fontFamily:"Space Mono",fontSize:"11px",color:"var(--text)",marginBottom:14}}>
+          ⚽ <strong>{activeTopic}</strong> — <em>{style}</em> — <em>{mode==="reactive"?"⚡ reactive":"🌲 evergreen"}</em>
+        </div>}
+
+        {/* Visual source indicator */}
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:14}}>
+          Visuals: {hfReady?<><span className="hf-badge">HIGGSFIELD</span><span className="px-badge">PEXELS</span></>:<><span className="px-badge">PEXELS ONLY</span><span style={{marginLeft:6}}>— enable Higgsfield in ⚙️ Setup</span></>}
+        </div>
+
+        <Btn disabled={!activeTopic} onClick={()=>{doScript();setOpenStage(2);}}>Generate Script →</Btn>
+      </div>}
+    </div>
+
+    {/* Stage 2: Script */}
+    <div className={`fb-stage ${openStage===2?"active":""}`}>
+      <FbHdr n={2} label="Script" done={!!script}/>
+      {openStage===2&&<div className="fb-stage-body">
+        <Banner st={scriptStatus} msgs={["Writing script via Claude…","Script ready","Script failed — is server.py running?"]}/>
+        {script&&<div style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:10,padding:14,marginBottom:12}}>
+          <div style={{color:"#ADFF2F",fontWeight:700,fontSize:"14px",marginBottom:10,lineHeight:1.5}}>"{script.hook}"</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text2)",lineHeight:1.8,marginBottom:12,maxHeight:120,overflowY:"auto",whiteSpace:"pre-wrap"}}>{script.narration}</div>
+          {script.scenes&&<div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {script.scenes.map((sc,i)=><div key={i} style={{display:"flex",gap:8,fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",alignItems:"flex-start"}}>
+              <span style={{color:"#ADFF2F",minWidth:14,fontWeight:700}}>{i+1}</span>
+              <span style={{flex:1}}>{sc.narration_segment}</span>
+              <span style={{whiteSpace:"nowrap"}}>{sc.duration_seconds}s</span>
+              {sc.use_higgsfield?<span className="hf-badge">HF</span>:<span className="px-badge">PX</span>}
+            </div>)}
+          </div>}
+        </div>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn variant="ghost" small disabled={scriptStatus==="loading"} onClick={doScript}>↺ Regenerate</Btn>
+          <Btn disabled={!script||scriptStatus==="loading"} onClick={()=>{doVisuals();setOpenStage(3);}}>Get Visuals →</Btn>
+        </div>
+      </div>}
+    </div>
+
+    {/* Stage 3: Visuals */}
+    <div className={`fb-stage ${openStage===3?"active":""}`}>
+      <FbHdr n={3} label={hfReady?"Get Visuals (Pexels + Higgsfield)":"Get Visuals (Pexels)"} done={visuals.length>0}/>
+      {openStage===3&&<div className="fb-stage-body">
+        <Banner st={visualStatus} msgs={[hfReady?"Fetching Pexels + generating Higgsfield hero…":"Fetching Pexels clips…",visuals.length+" visual assets ready","Visual fetch failed — check Pexels key in Setup ⚙️"]}/>
+        {visuals.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8,marginBottom:14}}>
+          {visuals.map((v,i)=><div key={i} style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",aspectRatio:"9/16",background:"var(--bg3)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {v.thumbnail_url?<img src={v.thumbnail_url} alt={v.keyword} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.2rem"}}>🎬</span>}
+            <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.6)",padding:"3px 5px",textAlign:"center"}}>
+              {v.source==="higgsfield"?<span className="hf-badge">HF</span>:<span className="px-badge">PX</span>}
+            </div>
+          </div>)}
+        </div>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn variant="ghost" small disabled={visualStatus==="loading"} onClick={doVisuals}>↺ Refetch</Btn>
+          <Btn disabled={!visuals.length||visualStatus==="loading"} onClick={()=>{doAssemble();setOpenStage(4);}}>Assemble Video →</Btn>
+        </div>
+      </div>}
+    </div>
+
+    {/* Stage 4: Video */}
+    <div className={`fb-stage ${openStage===4?"active":""}`}>
+      <FbHdr n={4} label="Generate Video + Preview" done={!!(slot&&slot.has_video)}/>
+      {openStage===4&&<div className="fb-stage-body">
+        <Banner st={videoStatus} msgs={["Assembling video with FFmpeg + Edge TTS (~30s)…","Video ready — click to preview","Assembly failed — is server.py running on port 8080?"]}/>
+        {slot&&slot.has_video&&<div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:14}}>
+          <div onClick={()=>setModal(true)} style={{width:90,aspectRatio:"9/16",background:"var(--bg3)",borderRadius:8,overflow:"hidden",cursor:"pointer",border:"1px solid rgba(173,255,47,0.3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {slot.thumbnail_path?<img src={SERVER+"/file/football_"+slot.id+"_thumb.jpg"} alt="thumb" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.5rem"}}>▶</span>}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontWeight:700,fontSize:"13px",marginBottom:6}}>{slot.topic||activeTopic}</div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:4}}>Hook: "{slot.hook}"</div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>Click thumbnail to preview</div>
+          </div>
+        </div>}
+        {slot&&slot.has_video&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          <Btn variant="ghost" small onClick={doAssemble}>↺ Regenerate</Btn>
+          <Btn onClick={()=>setOpenStage(5)}>Schedule →</Btn>
+        </div>}
+      </div>}
+    </div>
+
+    {/* Stage 5: Schedule */}
+    <div className={`fb-stage ${openStage===5?"active":""}`}>
+      <FbHdr n={5} label="Schedule to YouTube" done={!!(slot&&slot.scheduled)}/>
+      {openStage===5&&<div className="fb-stage-body">
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:12,lineHeight:1.8}}>
+          Auto-slots to next available time · {settings.footballVideosPerDay||2} videos/day max<br/>
+          Upload handled by upload_runner.py at 9 AM daily
+        </div>
+        {slot&&<div style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:10,padding:12,marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{slot.topic||activeTopic}</div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:slot.scheduled?"#ADFF2F":"#FF6B35"}}>
+              {slot.scheduled?"✓ SCHEDULED":"PENDING"}
+            </div>
+          </div>
+          {slot.publish_at&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginTop:4}}>
+            Publishes: {new Date(slot.publish_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+          </div>}
+        </div>}
+        {slot&&slot.has_video&&!slot.scheduled&&<Btn onClick={doSchedule}>Schedule This Video →</Btn>}
+        {slot&&slot.scheduled&&<div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:"#ADFF2F",animation:"pulse 2s infinite"}}/>
+          <span style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F"}}>Added to upload queue</span>
+        </div>}
+      </div>}
+    </div>
+
+    {/* Stage 6: Match Monitor */}
+    <div className={`fb-stage ${openStage===6?"active":""}`}>
+      <FbHdr n={6} label="⚡ Match Monitor" done={false}/>
+      {openStage===6&&<div className="fb-stage-body">
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>
+            <span className="live-dot"/>World Cup 2026 · Polls every 30 min
+          </div>
+          <Btn small variant="ghost" onClick={doMatches} disabled={matchStatus==="loading"}>
+            {matchStatus==="loading"?<><Spinner size={12}/>Checking…</>:"↺ Refresh"}
+          </Btn>
+        </div>
+
+        {matchStatus==="err"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",marginBottom:12}}>
+          Could not fetch matches.{!settings.footballDataKey&&<span style={{color:"#FF2D6B"}}> Add Football-Data.org API key in ⚙️ Setup → Football Engine section.</span>}
+        </div>}
+
+        {upsets.length>0&&<div style={{marginBottom:14}}>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#FF2D6B",letterSpacing:".08em",marginBottom:8}}>⚡ CONTENT OPPORTUNITIES</div>
+          {upsets.map((u,i)=><div key={i} className="match-card upset">
+            <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{u.team1} vs {u.team2}</div>
+            <div style={{fontFamily:"Space Mono",fontSize:"16px",fontWeight:700,color:"#FF2D6B"}}>{u.score}</div>
+            <button onClick={()=>triggerFromUpset(u)} style={{padding:"5px 10px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"Space Mono",fontSize:"10px",cursor:"pointer",flexShrink:0}}>Generate →</button>
+          </div>)}
+        </div>}
+
+        {matches.length>0&&<div>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",letterSpacing:".08em",marginBottom:8}}>TODAY'S MATCHES</div>
+          {matches.map((m,i)=><div key={i} className={`match-card ${m.is_upset?"upset":""}`}>
+            <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{m.team1} vs {m.team2}</div>
+            <div style={{fontFamily:"Space Mono",fontSize:"15px",fontWeight:700,color:"var(--text)"}}>{m.score||"—:—"}</div>
+            <Tag color={m.status==="LIVE"?"#FF2D6B":m.status==="FT"?"var(--text4)":"#00CFFF"}>{m.status}</Tag>
+          </div>)}
+        </div>}
+
+        {matches.length===0&&matchStatus!=="loading"&&matchStatus!=="err"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)"}}>
+          Click Refresh to load today's World Cup matches.
+        </div>}
+      </div>}
+    </div>
+
+    {/* Video preview modal */}
+    {modal&&slot&&slot.has_video&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setModal(false)}>
+      <div style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:360,padding:20,position:"relative"}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>setModal(false)} style={{position:"absolute",top:14,right:14,background:"none",border:"none",fontSize:"1.2rem",cursor:"pointer",color:"var(--text4)"}}>✕</button>
+        <div style={{fontWeight:700,fontSize:"14px",marginBottom:12,paddingRight:24}}>{slot.topic||activeTopic}</div>
+        <video controls style={{width:"100%",aspectRatio:"9/16",borderRadius:10,background:"#000",marginBottom:12}}
+          src={SERVER+"/file/football_"+slot.id+".mp4"}/>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:12}}>"{slot.hook}"</div>
+        <div style={{display:"flex",gap:8}}>
+          <Btn small variant="ghost" onClick={()=>{setModal(false);doAssemble();}}>↺ Regenerate</Btn>
+          <Btn small onClick={()=>{setModal(false);setOpenStage(5);}}>Schedule →</Btn>
+        </div>
+      </div>
+    </div>}
+
+  </div>;
+}
 
 // ── Aggregation Views ─────────────────────────────────────────
 function AggregateView({weeks,period}){
@@ -1132,6 +1524,8 @@ function App(){
         <button onClick={addWeek} style={{background:"transparent",border:"1px dashed var(--border)",borderRadius:"8px",padding:"5px 10px",color:"var(--text4)",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"12px",cursor:"pointer",flexShrink:0}}>+ Week</button>
         <div style={{width:"1px",background:"var(--border)",margin:"0 2px",flexShrink:0}}/>
         {[["month","Month"],["quarter","Quarter"],["year","Year"]].map(([id,label])=><button key={id} onClick={()=>setActiveTab(id)} style={{background:activeTab===id?"var(--bg4)":"transparent",color:activeTab===id?"var(--text)":"var(--text4)",border:"1px solid "+(activeTab===id?"var(--border)":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:600,fontSize:"11px",cursor:"pointer",flexShrink:0}}>{label}</button>)}
+        <div style={{width:"1px",background:"var(--border)",margin:"0 2px",flexShrink:0}}/>
+        <button onClick={()=>setActiveTab("football")} style={{background:activeTab==="football"?"#ADFF2F":"transparent",color:activeTab==="football"?"#08080E":"var(--text4)",border:"1px solid "+(activeTab==="football"?"#ADFF2F":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer",flexShrink:0}}>⚽</button>
       </div>
       {/* Right controls */}
       <div style={{display:"flex",gap:"5px",alignItems:"center",flexShrink:0}}>
@@ -1148,20 +1542,22 @@ function App(){
 
     {/* Main content */}
     <div style={{maxWidth:"860px",margin:"0 auto",padding:"16px 12px 80px"}}>
-      {isAggView
-        ? <AggregateView weeks={weeks} period={activeTab.toUpperCase()}/>
-        : activeWeekIdx>=0&&activeWeekIdx<weeks.length
-          ? <WeekWorkspace
-              week={weeks[activeWeekIdx]}
-              updateWeek={(data)=>updateWeek(activeWeekIdx,data)}
-              settings={settings}
-              ytToken={ytToken}
-              connectYT={connectYT}
-              serverOnline={serverOnline}
-              onCheckServer={checkServer}
-              allWeeks={weeks}
-            />
-          : <div style={{padding:"40px",textAlign:"center",color:"var(--text4)"}}>Select a week above</div>
+      {activeTab==="football"
+        ? <FootballTab settings={settings}/>
+        : isAggView
+          ? <AggregateView weeks={weeks} period={activeTab.toUpperCase()}/>
+          : activeWeekIdx>=0&&activeWeekIdx<weeks.length
+            ? <WeekWorkspace
+                week={weeks[activeWeekIdx]}
+                updateWeek={(data)=>updateWeek(activeWeekIdx,data)}
+                settings={settings}
+                ytToken={ytToken}
+                connectYT={connectYT}
+                serverOnline={serverOnline}
+                onCheckServer={checkServer}
+                allWeeks={weeks}
+              />
+            : <div style={{padding:"40px",textAlign:"center",color:"var(--text4)"}}>Select a week above</div>
       }
     </div>
 
