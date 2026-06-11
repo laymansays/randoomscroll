@@ -1079,6 +1079,14 @@ function FootballTab({settings}){
   const [matches,setMatches]=useState([]);
   const [upsets,setUpsets]=useState([]);
   const [modal,setModal]=useState(false);
+  // Batch mode state
+  const [batchMode,setBatchMode]=useState(false);
+  const [batchCount,setBatchCount]=useState(10);
+  const [batchStatus,setBatchStatus]=useState("idle"); // idle|angles|generating|done|err
+  const [batchAngles,setBatchAngles]=useState([]);
+  const [batchSlots,setBatchSlots]=useState([]);
+  const [batchProgress,setBatchProgress]=useState(0);
+  const [batchModal,setBatchModal]=useState(null); // slot index for preview
 
   const activeTopic = custom.trim() ? custom.trim() : topic;
   const hfReady = settings.higgsfieldEnabled && settings.higgsfieldKey && settings.higgsfieldKey.length > 8;
@@ -1162,6 +1170,64 @@ function FootballTab({settings}){
     window.scrollTo({top:0,behavior:"smooth"});
   }
 
+  // ── Batch mode functions ──────────────────────────────────
+  async function doBatchAngles(){
+    if(!activeTopic) return;
+    setBatchStatus("angles"); setBatchAngles([]); setBatchSlots([]); setBatchProgress(0);
+    try{
+      const r=await fetch(SERVER+"/football/batch-angles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:activeTopic,content_style:style,count:batchCount})});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setBatchAngles(d.angles||[]);
+      setBatchStatus("ready");
+      setOpenStage(2);
+    }catch(e){setBatchStatus("err");}
+  }
+
+  async function doBatchGenerate(){
+    if(!batchAngles.length) return;
+    setBatchStatus("generating"); setBatchSlots([]); setBatchProgress(0);
+    try{
+      const r=await fetch(SERVER+"/football/batch-generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        topic:activeTopic,
+        content_style:style,
+        mode,
+        angles:batchAngles,
+        higgsfield_enabled:hfReady,
+        pexels_api_key:settings.pexelsKey,
+        auto_schedule:true,
+      })});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setBatchSlots(d.results||[]);
+      setBatchProgress(d.successful||0);
+      setBatchStatus("done");
+      setOpenStage(4);
+    }catch(e){setBatchStatus("err");}
+  }
+
+  async function doAddMore(extraCount){
+    if(!activeTopic) return;
+    setBatchStatus("angles");
+    try{
+      const r=await fetch(SERVER+"/football/batch-angles",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:activeTopic,content_style:style,count:extraCount})});
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      const newAngles=d.angles||[];
+      setBatchAngles(prev=>[...prev,...newAngles]);
+      setBatchStatus("generating");
+      const r2=await fetch(SERVER+"/football/batch-generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        topic:activeTopic,content_style:style,mode,angles:newAngles,
+        higgsfield_enabled:hfReady,pexels_api_key:settings.pexelsKey,auto_schedule:true,
+      })});
+      if(!r2.ok) throw new Error(r2.status);
+      const d2=await r2.json();
+      setBatchSlots(prev=>[...prev,...(d2.results||[])]);
+      setBatchProgress(prev=>prev+(d2.successful||0));
+      setBatchStatus("done");
+    }catch(e){setBatchStatus("err");}
+  }
+
   return <div className="fade-up" style={{paddingBottom:60}}>
 
     {/* Stage 1: Topic */}
@@ -1219,31 +1285,97 @@ function FootballTab({settings}){
           Visuals: {hfReady?<><span className="hf-badge">HIGGSFIELD</span><span className="px-badge">PEXELS</span></>:<><span className="px-badge">PEXELS ONLY</span><span style={{marginLeft:6}}>— enable Higgsfield in ⚙️ Setup</span></>}
         </div>
 
-        <Btn disabled={!activeTopic} onClick={()=>{doScript();setOpenStage(2);}}>Generate Script →</Btn>
+        {/* Batch mode toggle */}
+        <div style={{borderTop:"1px solid var(--border)",paddingTop:14,marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div>
+              <div style={{fontWeight:700,fontSize:"13px",marginBottom:2}}>Generation Mode</div>
+              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>
+                {batchMode?"Generate multiple videos for this topic at once":"Generate one video at a time"}
+              </div>
+            </div>
+            <div className="fb-mode-toggle" style={{margin:0}}>
+              <button className={`fb-mode-btn ${!batchMode?"active":""}`} onClick={()=>setBatchMode(false)}>Single</button>
+              <button className={`fb-mode-btn ${batchMode?"active":""}`} onClick={()=>setBatchMode(true)}>⚡ Batch</button>
+            </div>
+          </div>
+          {batchMode&&<div>
+            <div className="fb-label" style={{marginBottom:6}}>Number of videos</div>
+            <div style={{display:"flex",gap:6,alignItems:"center"}}>
+              {[5,10,15,20].map(n=><button key={n} className={`fb-chip ${batchCount===n?"active":""}`} onClick={()=>setBatchCount(n)}>{n}</button>)}
+              <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginLeft:4}}>
+                videos · ~{batchCount*0.5} min on your machine
+              </span>
+            </div>
+          </div>}
+        </div>
+
+        {batchMode
+          ? <Btn disabled={!activeTopic} onClick={()=>{doBatchAngles();setOpenStage(2);}}>Generate {batchCount} Angles →</Btn>
+          : <Btn disabled={!activeTopic} onClick={()=>{doScript();setOpenStage(2);}}>Generate Script →</Btn>
+        }
       </div>}
     </div>
 
-    {/* Stage 2: Script */}
+    {/* Stage 2: Script / Angles */}
     <div className={`fb-stage ${openStage===2?"active":""}`}>
-      <FbHdr n={2} label="Script" done={!!script}/>
+      <FbHdr n={2} label={batchMode?"Angles Preview":"Script"} done={batchMode?batchAngles.length>0:!!script}/>
       {openStage===2&&<div className="fb-stage-body">
-        <Banner st={scriptStatus} msgs={["Writing script via Claude…","Script ready","Script failed — is server.py running?"]}/>
-        {script&&<div style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:10,padding:14,marginBottom:12}}>
-          <div style={{color:"#ADFF2F",fontWeight:700,fontSize:"14px",marginBottom:10,lineHeight:1.5}}>"{script.hook}"</div>
-          <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text2)",lineHeight:1.8,marginBottom:12,maxHeight:120,overflowY:"auto",whiteSpace:"pre-wrap"}}>{script.narration}</div>
-          {script.scenes&&<div style={{display:"flex",flexDirection:"column",gap:6}}>
-            {script.scenes.map((sc,i)=><div key={i} style={{display:"flex",gap:8,fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",alignItems:"flex-start"}}>
-              <span style={{color:"#ADFF2F",minWidth:14,fontWeight:700}}>{i+1}</span>
-              <span style={{flex:1}}>{sc.narration_segment}</span>
-              <span style={{whiteSpace:"nowrap"}}>{sc.duration_seconds}s</span>
-              {sc.use_higgsfield?<span className="hf-badge">HF</span>:<span className="px-badge">PX</span>}
-            </div>)}
+
+        {/* BATCH MODE */}
+        {batchMode&&<>
+          {(batchStatus==="angles")&&<div className="fb-banner info"><Spinner size={12}/>Generating {batchCount} angles via Claude…</div>}
+          {(batchStatus==="err")&&<div className="fb-banner err">Failed — is server.py running?</div>}
+          {batchAngles.length>0&&<>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:10,letterSpacing:".06em"}}>
+              {batchAngles.length} ANGLES READY · Each becomes a unique video · Scheduled on alternate days
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14,maxHeight:320,overflowY:"auto"}}>
+              {batchAngles.map((a,i)=><div key={i} style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:8,padding:"10px 12px"}}>
+                <div style={{display:"flex",gap:8,alignItems:"flex-start"}}>
+                  <span style={{color:"#ADFF2F",fontFamily:"Space Mono",fontSize:"10px",minWidth:18,fontWeight:700}}>{i+1}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontWeight:700,fontSize:"12px",marginBottom:3}}>{a.title}</div>
+                    <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:3}}>{a.angle}</div>
+                    <div style={{display:"flex",gap:6}}>
+                      <span style={{fontFamily:"Space Mono",fontSize:"9px",padding:"1px 6px",borderRadius:3,background:"rgba(173,255,47,0.1)",color:"#ADFF2F"}}>{a.hook_style}</span>
+                      <span style={{fontFamily:"Space Mono",fontSize:"9px",padding:"1px 6px",borderRadius:3,background:"rgba(0,207,255,0.1)",color:"#00CFFF"}}>{a.emotional_trigger}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>)}
+            </div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:12,padding:"8px 12px",background:"rgba(173,255,47,0.04)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:8}}>
+              ⏱ Estimated time: ~{Math.round(batchAngles.length*0.5)} minutes on your machine<br/>
+              📅 Videos will auto-schedule on alternate days starting tomorrow
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn variant="ghost" small onClick={doBatchAngles}>↺ Regenerate Angles</Btn>
+              <Btn onClick={()=>{doBatchGenerate();setOpenStage(4);}}>Generate All {batchAngles.length} Videos →</Btn>
+            </div>
+          </>}
+        </>}
+
+        {/* SINGLE MODE */}
+        {!batchMode&&<>
+          <Banner st={scriptStatus} msgs={["Writing script via Claude…","Script ready","Script failed — is server.py running?"]}/>
+          {script&&<div style={{background:"var(--card2)",border:"1px solid var(--border)",borderRadius:10,padding:14,marginBottom:12}}>
+            <div style={{color:"#ADFF2F",fontWeight:700,fontSize:"14px",marginBottom:10,lineHeight:1.5}}>"{script.hook}"</div>
+            <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text2)",lineHeight:1.8,marginBottom:12,maxHeight:120,overflowY:"auto",whiteSpace:"pre-wrap"}}>{script.narration}</div>
+            {script.scenes&&<div style={{display:"flex",flexDirection:"column",gap:6}}>
+              {script.scenes.map((sc,i)=><div key={i} style={{display:"flex",gap:8,fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",alignItems:"flex-start"}}>
+                <span style={{color:"#ADFF2F",minWidth:14,fontWeight:700}}>{i+1}</span>
+                <span style={{flex:1}}>{sc.narration_segment}</span>
+                <span style={{whiteSpace:"nowrap"}}>{sc.duration_seconds}s</span>
+                {sc.use_higgsfield?<span className="hf-badge">HF</span>:<span className="px-badge">PX</span>}
+              </div>)}
+            </div>}
           </div>}
-        </div>}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <Btn variant="ghost" small disabled={scriptStatus==="loading"} onClick={doScript}>↺ Regenerate</Btn>
-          <Btn disabled={!script||scriptStatus==="loading"} onClick={()=>{doVisuals();setOpenStage(3);}}>Get Visuals →</Btn>
-        </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Btn variant="ghost" small disabled={scriptStatus==="loading"} onClick={doScript}>↺ Regenerate</Btn>
+            <Btn disabled={!script||scriptStatus==="loading"} onClick={()=>{doVisuals();setOpenStage(3);}}>Get Visuals →</Btn>
+          </div>
+        </>}
       </div>}
     </div>
 
@@ -1269,23 +1401,78 @@ function FootballTab({settings}){
 
     {/* Stage 4: Video */}
     <div className={`fb-stage ${openStage===4?"active":""}`}>
-      <FbHdr n={4} label="Generate Video + Preview" done={!!(slot&&slot.has_video)}/>
+      <FbHdr n={4} label={batchMode?"Generate Videos + Preview":"Generate Video + Preview"} done={batchMode?batchSlots.some(s=>s.has_video):!!(slot&&slot.has_video)}/>
       {openStage===4&&<div className="fb-stage-body">
-        <Banner st={videoStatus} msgs={["Assembling video with FFmpeg + Edge TTS (~30s)…","Video ready — click to preview","Assembly failed — is server.py running on port 8080?"]}/>
-        {slot&&slot.has_video&&<div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:14}}>
-          <div onClick={()=>setModal(true)} style={{width:90,aspectRatio:"9/16",background:"var(--bg3)",borderRadius:8,overflow:"hidden",cursor:"pointer",border:"1px solid rgba(173,255,47,0.3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {slot.thumbnail_path?<img src={SERVER+"/file/football_"+slot.id+"_thumb.jpg"} alt="thumb" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.5rem"}}>▶</span>}
-          </div>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:"13px",marginBottom:6}}>{slot.topic||activeTopic}</div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:4}}>Hook: "{slot.hook}"</div>
-            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>Click thumbnail to preview</div>
-          </div>
-        </div>}
-        {slot&&slot.has_video&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <Btn variant="ghost" small onClick={doAssemble}>↺ Regenerate</Btn>
-          <Btn onClick={()=>setOpenStage(5)}>Schedule →</Btn>
-        </div>}
+
+        {/* BATCH MODE */}
+        {batchMode&&<>
+          {batchStatus==="generating"&&<div className="fb-banner info">
+            <Spinner size={12}/>
+            Generating videos… this takes ~{Math.round(batchAngles.length*0.5)} minutes. Leave this running.
+          </div>}
+          {batchStatus==="done"&&<div className="fb-banner ok">
+            ✓ {batchSlots.filter(s=>s.has_video).length}/{batchSlots.length} videos ready · {batchSlots.filter(s=>s.scheduled).length} scheduled on alternate days
+          </div>}
+          {batchStatus==="err"&&<div className="fb-banner err">Batch generation failed — check server terminal</div>}
+
+          {/* Progress during generation */}
+          {batchStatus==="generating"&&batchAngles.length>0&&<div style={{marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:6}}>
+              <span>Progress</span>
+              <span>{batchProgress}/{batchAngles.length}</span>
+            </div>
+            <div style={{height:6,background:"var(--bg3)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",background:"#ADFF2F",borderRadius:3,width:`${(batchProgress/batchAngles.length)*100}%`,transition:"width .3s"}}/>
+            </div>
+          </div>}
+
+          {/* Completed slots grid */}
+          {batchSlots.length>0&&<>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(120px,1fr))",gap:8,marginBottom:14}}>
+              {batchSlots.map((s,i)=><div key={i} onClick={()=>s.has_video&&setBatchModal(i)}
+                style={{border:"1px solid "+(s.has_video?"rgba(173,255,47,0.3)":"var(--border)"),borderRadius:8,overflow:"hidden",background:"var(--card2)",cursor:s.has_video?"pointer":"default",opacity:s.has_video?1:0.5}}>
+                <div style={{aspectRatio:"9/16",background:"var(--bg3)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative"}}>
+                  {s.thumbnail_path
+                    ? <img src={SERVER+"/file/football_"+s.id+"_thumb.jpg"} alt="thumb" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                    : <span style={{fontSize:"1.2rem"}}>{s.has_video?"▶":"⏳"}</span>
+                  }
+                  {s.scheduled&&<div style={{position:"absolute",top:4,right:4,background:"#ADFF2F",borderRadius:3,padding:"1px 5px",fontFamily:"Space Mono",fontSize:"8px",color:"#08080E",fontWeight:700}}>SCHED</div>}
+                </div>
+                <div style={{padding:"6px 7px"}}>
+                  <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text)",lineHeight:1.3,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{s.title}</div>
+                  {s.publish_at&&<div style={{fontFamily:"Space Mono",fontSize:"8px",color:"#ADFF2F",marginTop:3}}>
+                    {new Date(s.publish_at).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
+                  </div>}
+                </div>
+              </div>)}
+            </div>
+
+            {/* Add more button */}
+            {batchStatus==="done"&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <Btn variant="ghost" small onClick={()=>doAddMore(5)}>+ Add 5 More Videos</Btn>
+              <Btn variant="ghost" small onClick={()=>doAddMore(10)}>+ Add 10 More Videos</Btn>
+            </div>}
+          </>}
+        </>}
+
+        {/* SINGLE MODE */}
+        {!batchMode&&<>
+          <Banner st={videoStatus} msgs={["Assembling video with FFmpeg + Edge TTS (~30s)…","Video ready — click to preview","Assembly failed — is server.py running on port 8080?"]}/>
+          {slot&&slot.has_video&&<div style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:14}}>
+            <div onClick={()=>setModal(true)} style={{width:90,aspectRatio:"9/16",background:"var(--bg3)",borderRadius:8,overflow:"hidden",cursor:"pointer",border:"1px solid rgba(173,255,47,0.3)",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              {slot.thumbnail_path?<img src={SERVER+"/file/football_"+slot.id+"_thumb.jpg"} alt="thumb" style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.5rem"}}>▶</span>}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:"13px",marginBottom:6}}>{slot.topic||activeTopic}</div>
+              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:4}}>Hook: "{slot.hook}"</div>
+              <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>Click thumbnail to preview</div>
+            </div>
+          </div>}
+          {slot&&slot.has_video&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            <Btn variant="ghost" small onClick={doAssemble}>↺ Regenerate</Btn>
+            <Btn onClick={()=>setOpenStage(5)}>Schedule →</Btn>
+          </div>}
+        </>}
       </div>}
     </div>
 
@@ -1357,7 +1544,7 @@ function FootballTab({settings}){
       </div>}
     </div>
 
-    {/* Video preview modal */}
+    {/* Single video preview modal */}
     {modal&&slot&&slot.has_video&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setModal(false)}>
       <div style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:360,padding:20,position:"relative"}} onClick={e=>e.stopPropagation()}>
         <button onClick={()=>setModal(false)} style={{position:"absolute",top:14,right:14,background:"none",border:"none",fontSize:"1.2rem",cursor:"pointer",color:"var(--text4)"}}>✕</button>
@@ -1368,6 +1555,30 @@ function FootballTab({settings}){
         <div style={{display:"flex",gap:8}}>
           <Btn small variant="ghost" onClick={()=>{setModal(false);doAssemble();}}>↺ Regenerate</Btn>
           <Btn small onClick={()=>{setModal(false);setOpenStage(5);}}>Schedule →</Btn>
+        </div>
+      </div>
+    </div>}
+
+    {/* Batch video preview modal */}
+    {batchModal!==null&&batchSlots[batchModal]&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.8)",zIndex:400,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setBatchModal(null)}>
+      <div style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:400,padding:20,position:"relative"}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>setBatchModal(null)} style={{position:"absolute",top:14,right:14,background:"none",border:"none",fontSize:"1.2rem",cursor:"pointer",color:"var(--text4)"}}>✕</button>
+        {/* Nav between batch videos */}
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,paddingRight:24}}>
+          <button onClick={()=>setBatchModal(i=>Math.max(0,i-1))} disabled={batchModal===0}
+            style={{background:"none",border:"1px solid var(--border)",borderRadius:6,padding:"4px 8px",cursor:"pointer",color:"var(--text4)",fontSize:"12px"}}>←</button>
+          <div style={{flex:1,fontWeight:700,fontSize:"12px",textAlign:"center"}}>{batchSlots[batchModal].title}</div>
+          <button onClick={()=>setBatchModal(i=>Math.min(batchSlots.length-1,i+1))} disabled={batchModal===batchSlots.length-1}
+            style={{background:"none",border:"1px solid var(--border)",borderRadius:6,padding:"4px 8px",cursor:"pointer",color:"var(--text4)",fontSize:"12px"}}>→</button>
+        </div>
+        <video controls style={{width:"100%",aspectRatio:"9/16",borderRadius:10,background:"#000",marginBottom:10}}
+          src={SERVER+"/file/football_"+batchSlots[batchModal].id+".mp4"}/>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",marginBottom:6}}>"{batchSlots[batchModal].hook}"</div>
+        {batchSlots[batchModal].publish_at&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)"}}>
+          Scheduled: {new Date(batchSlots[batchModal].publish_at).toLocaleString("en-IN",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}
+        </div>}
+        <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginTop:4}}>
+          Video {batchModal+1} of {batchSlots.length}
         </div>
       </div>
     </div>}
