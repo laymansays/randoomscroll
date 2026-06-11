@@ -116,7 +116,7 @@ function makeSlots(types, topics) {
 
 const initWeek = (number) => ({id:uid(),number,niche:"",topics:["","",""],contentTypes:["cliffhanger","explanatory"],slots:[],analytics:null,comparison:null,evolvedPrompt:"",locked:false,scheduled:false,scheduledAt:null});
 
-const INIT_SETTINGS = {bufferToken:"",bufferYTProfile:"6a058c6e090476fb991b0ba5",pexelsKey:"",youtubeClientId:"",postingTimes:["07:00","13:00","18:00"],voiceId:"en-US-ChristopherNeural",targetDuration:55,instagramEnabled:false,bufferIGProfile:"",supabaseUrl:"",supabaseKey:"",channelKey:"",higgsfieldKey:"",higgsfieldEnabled:false,higgsfieldModel:"cinematic_studio_video_v2",footballDataKey:"",footballVideosPerDay:2};
+const INIT_SETTINGS = {bufferToken:"",bufferYTProfile:"6a058c6e090476fb991b0ba5",pexelsKey:"",youtubeClientId:"",postingTimes:["07:00","13:00","18:00"],voiceId:"en-US-ChristopherNeural",targetDuration:55,instagramEnabled:false,bufferIGProfile:"",supabaseUrl:"",supabaseKey:"",channelKey:"",openaiKey:"",visualSource:"pexels",footballDataKey:"",footballVideosPerDay:2};
 
 // ── Supabase ──────────────────────────────────────────────────
 async function sbLoad(url,key,ch){if(!url||!key||!ch)return null;try{const r=await fetch(url+"/rest/v1/r00m_data?channel_key=eq."+encodeURIComponent(ch)+"&select=*",{headers:{apikey:key,Authorization:"Bearer "+key}});const d=await r.json();return Array.isArray(d)&&d[0]?d[0]:null;}catch{return null;}}
@@ -991,29 +991,40 @@ function SetupOverlay({settings,setSettings,onClose,onSync}){
         {/* Football Engine */}
         <Section title="⚽  FOOTBALL ENGINE" open={hfOpen} onToggle={()=>setHfOpen(!hfOpen)} accent="#ADFF2F">
           <div style={{background:"rgba(173,255,47,0.04)",border:"1px solid rgba(173,255,47,0.15)",borderRadius:8,padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:2}}>
-            <div>Pexels is used by default (free). Enable Higgsfield for AI visuals.</div>
+            <div>Pexels is free. OpenAI DALL-E 3 generates AI images matched to your script (~$0.04/image).</div>
             <div>Get football-data.org key free at football-data.org/client/register</div>
           </div>
+
+          {/* Visual source toggle */}
           <div>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-              <div>
-                <div style={{fontSize:"13px",fontWeight:700,marginBottom:2}}>Enable Higgsfield AI Visuals</div>
-                <div style={{fontSize:"11px",color:"var(--text4)"}}>Uses credits. Pexels used when off.</div>
-              </div>
-              <button onClick={()=>set("higgsfieldEnabled",!local.higgsfieldEnabled)} style={{padding:"7px 14px",borderRadius:8,border:"none",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"11px",cursor:"pointer",background:local.higgsfieldEnabled?"#ADFF2F":"var(--bg4)",color:local.higgsfieldEnabled?"#08080E":"var(--text4)"}}>
-                {local.higgsfieldEnabled?"ON ✓":"OFF"}
+            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:8}}>Visual Source</div>
+            <div style={{display:"flex",gap:0,border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",width:"fit-content",marginBottom:4}}>
+              <button onClick={()=>set("visualSource","pexels")} style={{padding:"8px 18px",border:"none",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"11px",fontWeight:700,cursor:"pointer",background:(local.visualSource||"pexels")==="pexels"?"#05a081":"var(--bg4)",color:(local.visualSource||"pexels")==="pexels"?"#fff":"var(--text4)",transition:"all .15s"}}>
+                PEXELS
+              </button>
+              <button onClick={()=>set("visualSource","dalle3")} style={{padding:"8px 18px",border:"none",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"11px",fontWeight:700,cursor:"pointer",background:(local.visualSource||"pexels")==="dalle3"?"#10a37f":"var(--bg4)",color:(local.visualSource||"pexels")==="dalle3"?"#fff":"var(--text4)",transition:"all .15s"}}>
+                OPENAI
               </button>
             </div>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginTop:4}}>
+              {(local.visualSource||"pexels")==="pexels"
+                ? "Free stock footage. Generic but reliable."
+                : "AI images generated from your script. Cinematic, unique, on-topic. ~$0.24/video (6 scenes × $0.04)."}
+            </div>
           </div>
-          <Field label="Higgsfield API Key" k="higgsfieldKey" type="password" hint="Get at higgsfield.ai → Account → API Keys"/>
-          <div>
-            <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:4}}>Video Model</div>
-            <select value={local.higgsfieldModel||"cinematic_studio_video_v2"} onChange={e=>set("higgsfieldModel",e.target.value)} style={{width:"100%",padding:"10px 14px",fontSize:"13px",borderRadius:8}}>
-              <option value="cinematic_studio_video_v2">Cinema Studio v2 — action genre (recommended)</option>
-              <option value="kling3_0">Kling 3.0 — cinematic multi-shot</option>
-              <option value="seedance_2_0">Seedance 2.0 — reference-driven</option>
-            </select>
-          </div>
+
+          {/* OpenAI key — only show when dalle3 selected */}
+          {(local.visualSource||"pexels")==="dalle3"&&<>
+            <Field label="OpenAI API Key" k="openaiKey" type="password" hint="platform.openai.com → API Keys → Create new secret key"/>
+            <div style={{background:"rgba(16,163,127,0.06)",border:"1px solid rgba(16,163,127,0.2)",borderRadius:8,padding:"10px 12px",fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",lineHeight:1.8}}>
+              <div style={{color:"#10a37f",fontWeight:700,marginBottom:4}}>DALL-E 3 RULES BAKED IN</div>
+              <div>✓ No real player names in image prompts</div>
+              <div>✓ Describes scenes, lighting, emotion — not people</div>
+              <div>✓ Cinematic composition per scene</div>
+              <div>✓ Ken Burns motion applied in FFmpeg</div>
+            </div>
+          </>}
+
           <Field label="Football-Data.org API Key (free)" k="footballDataKey" type="text" hint="football-data.org/client/register — enables Match Monitor"/>
           <div>
             <div style={{fontSize:"12px",color:"var(--text3)",fontWeight:700,marginBottom:6}}>Football Videos Per Day</div>
@@ -1089,7 +1100,8 @@ function FootballTab({settings}){
   const [batchModal,setBatchModal]=useState(null); // slot index for preview
 
   const activeTopic = custom.trim() ? custom.trim() : topic;
-  const hfReady = settings.higgsfieldEnabled && settings.higgsfieldKey && settings.higgsfieldKey.length > 8;
+  const dalleReady = settings.visualSource === "dalle3" && settings.openaiKey && settings.openaiKey.length > 10;
+  const visualSource = settings.visualSource || "pexels";
 
   const tog = (n) => setOpenStage(s => s===n ? 0 : n);
 
@@ -1114,7 +1126,7 @@ function FootballTab({settings}){
     if(!activeTopic) return;
     setScriptStatus("loading"); setScript(null);
     try{
-      const r=await fetch(SERVER+"/football/script",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:activeTopic,content_style:style,mode,match_context:ctx,higgsfield_enabled:hfReady})});
+      const r=await fetch(SERVER+"/football/script",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({topic:activeTopic,content_style:style,mode,match_context:ctx,visual_source:visualSource})});
       if(!r.ok) throw new Error(r.status);
       const d=await r.json();
       setScript(d); setScriptStatus("done"); setOpenStage(2);
@@ -1125,7 +1137,7 @@ function FootballTab({settings}){
     if(!script) return;
     setVisualStatus("loading"); setVisuals([]);
     try{
-      const r=await fetch(SERVER+"/football/visuals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({script,higgsfield_enabled:hfReady,pexels_api_key:settings.pexelsKey})});
+      const r=await fetch(SERVER+"/football/visuals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({script,visual_source:visualSource,pexels_api_key:settings.pexelsKey,openai_api_key:settings.openaiKey})});
       if(!r.ok) throw new Error(r.status);
       const d=await r.json();
       setVisuals(d.visuals||[]); setVisualStatus("done"); setOpenStage(3);
@@ -1193,8 +1205,9 @@ function FootballTab({settings}){
         content_style:style,
         mode,
         angles:batchAngles,
-        higgsfield_enabled:hfReady,
+        visual_source:visualSource,
         pexels_api_key:settings.pexelsKey,
+        openai_api_key:settings.openaiKey,
         auto_schedule:true,
       })});
       if(!r.ok) throw new Error(r.status);
@@ -1218,7 +1231,7 @@ function FootballTab({settings}){
       setBatchStatus("generating");
       const r2=await fetch(SERVER+"/football/batch-generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
         topic:activeTopic,content_style:style,mode,angles:newAngles,
-        higgsfield_enabled:hfReady,pexels_api_key:settings.pexelsKey,auto_schedule:true,
+        visual_source:visualSource,pexels_api_key:settings.pexelsKey,openai_api_key:settings.openaiKey,auto_schedule:true,
       })});
       if(!r2.ok) throw new Error(r2.status);
       const d2=await r2.json();
@@ -1282,7 +1295,9 @@ function FootballTab({settings}){
 
         {/* Visual source indicator */}
         <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",marginBottom:14}}>
-          Visuals: {hfReady?<><span className="hf-badge">HIGGSFIELD</span><span className="px-badge">PEXELS</span></>:<><span className="px-badge">PEXELS ONLY</span><span style={{marginLeft:6}}>— enable Higgsfield in ⚙️ Setup</span></>}
+          Visuals: {dalleReady
+            ? <span style={{display:"inline-block",padding:"2px 7px",borderRadius:3,background:"#10a37f",color:"#fff",fontSize:"9px",marginLeft:4}}>DALL-E 3</span>
+            : <><span className="px-badge">PEXELS</span><span style={{marginLeft:6}}>— switch to OpenAI in ⚙️ Setup for AI images</span></>}
         </div>
 
         {/* Batch mode toggle */}
@@ -1367,7 +1382,7 @@ function FootballTab({settings}){
                 <span style={{color:"#ADFF2F",minWidth:14,fontWeight:700}}>{i+1}</span>
                 <span style={{flex:1}}>{sc.narration_segment}</span>
                 <span style={{whiteSpace:"nowrap"}}>{sc.duration_seconds}s</span>
-                {sc.use_higgsfield?<span className="hf-badge">HF</span>:<span className="px-badge">PX</span>}
+                {sc.use_dalle?<span style={{display:"inline-block",padding:"1px 6px",borderRadius:3,background:"#10a37f",color:"#fff",fontSize:"9px",marginLeft:4}}>AI</span>:<span className="px-badge">PX</span>}
               </div>)}
             </div>}
           </div>}
@@ -1381,14 +1396,16 @@ function FootballTab({settings}){
 
     {/* Stage 3: Visuals */}
     <div className={`fb-stage ${openStage===3?"active":""}`}>
-      <FbHdr n={3} label={hfReady?"Get Visuals (Pexels + Higgsfield)":"Get Visuals (Pexels)"} done={visuals.length>0}/>
+      <FbHdr n={3} label={dalleReady?"Get Visuals (DALL-E 3 AI Images)":"Get Visuals (Pexels)"} done={visuals.length>0}/>
       {openStage===3&&<div className="fb-stage-body">
-        <Banner st={visualStatus} msgs={[hfReady?"Fetching Pexels + generating Higgsfield hero…":"Fetching Pexels clips…",visuals.length+" visual assets ready","Visual fetch failed — check Pexels key in Setup ⚙️"]}/>
+        <Banner st={visualStatus} msgs={[dalleReady?"Generating AI images via DALL-E 3… (~5s per scene)":"Fetching Pexels clips…",visuals.length+" visual assets ready","Visual fetch failed — check API key in Setup ⚙️"]}/>
         {visuals.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))",gap:8,marginBottom:14}}>
           {visuals.map((v,i)=><div key={i} style={{border:"1px solid var(--border)",borderRadius:8,overflow:"hidden",aspectRatio:"9/16",background:"var(--bg3)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
             {v.thumbnail_url?<img src={v.thumbnail_url} alt={v.keyword} style={{width:"100%",height:"100%",objectFit:"cover"}}/>:<span style={{fontSize:"1.2rem"}}>🎬</span>}
             <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,0.6)",padding:"3px 5px",textAlign:"center"}}>
-              {v.source==="higgsfield"?<span className="hf-badge">HF</span>:<span className="px-badge">PX</span>}
+              {v.source==="dalle3"
+                ? <span style={{display:"inline-block",padding:"1px 6px",borderRadius:3,background:"#10a37f",color:"#fff",fontSize:"9px"}}>AI</span>
+                : <span className="px-badge">PX</span>}
             </div>
           </div>)}
         </div>}
@@ -1586,6 +1603,203 @@ function FootballTab({settings}){
   </div>;
 }
 
+// ── Storage Tab ───────────────────────────────────────────────
+function StorageTab(){
+  const [videos,setVideos]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [filter,setFilter]=useState("all"); // all|posted|scheduled|pending
+  const [search,setSearch]=useState("");
+  const [sortBy,setSortBy]=useState("date"); // date|status|title
+  const [preview,setPreview]=useState(null);
+
+  async function load(){
+    setLoading(true);
+    try{
+      const r=await fetch(SERVER+"/storage");
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setVideos(d.videos||[]);
+    }catch(e){console.error("Storage load failed",e);}
+    setLoading(false);
+  }
+
+  useState(()=>{load();},[]);
+  React.useEffect(()=>{load();},[]);
+
+  const STATUS_COLOR={posted:"#ADFF2F",scheduled:"#00CFFF",pending:"#FF6B35"};
+  const STATUS_BG={posted:"rgba(173,255,47,0.1)",scheduled:"rgba(0,207,255,0.1)",pending:"rgba(255,107,53,0.1)"};
+
+  const filtered = videos
+    .filter(v=> filter==="all" || v.status===filter)
+    .filter(v=> !search || v.title.toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b)=>{
+      if(sortBy==="date")   return a.publish_at.localeCompare(b.publish_at);
+      if(sortBy==="status") return a.status.localeCompare(b.status);
+      if(sortBy==="title")  return a.title.localeCompare(b.title);
+      return 0;
+    });
+
+  const counts={
+    all:videos.length,
+    posted:videos.filter(v=>v.status==="posted").length,
+    scheduled:videos.filter(v=>v.status==="scheduled").length,
+    pending:videos.filter(v=>v.status==="pending").length,
+  };
+
+  return <div className="fade-up" style={{paddingBottom:60}}>
+
+    {/* Header */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+      <div>
+        <div style={{fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"20px",fontWeight:700,letterSpacing:".06em",marginBottom:4}}>
+          Content Storage
+        </div>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)"}}>
+          All football videos · thumbnails · schedules · status
+        </div>
+      </div>
+      <button onClick={load} style={{padding:"8px 14px",borderRadius:8,border:"1px solid var(--border)",background:"transparent",color:"var(--text4)",fontFamily:"Space Mono",fontSize:"11px",cursor:"pointer"}}>
+        {loading?"Loading…":"↺ Refresh"}
+      </button>
+    </div>
+
+    {/* Stats bar */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}}>
+      {[
+        {key:"all",   label:"Total",     icon:"📦"},
+        {key:"posted",label:"Posted",    icon:"✅"},
+        {key:"scheduled",label:"Scheduled",icon:"📅"},
+        {key:"pending",label:"Pending",  icon:"⏳"},
+      ].map(({key,label,icon})=>(
+        <div key={key} onClick={()=>setFilter(key)} style={{
+          background:filter===key?"rgba(173,255,47,0.08)":"var(--card)",
+          border:"1px solid "+(filter===key?"rgba(173,255,47,0.4)":"var(--border)"),
+          borderRadius:10,padding:"12px 14px",cursor:"pointer",transition:"all .15s"
+        }}>
+          <div style={{fontSize:"18px",marginBottom:4}}>{icon}</div>
+          <div style={{fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"22px",fontWeight:700,color:filter===key?"#ADFF2F":"var(--text)",marginBottom:2}}>{counts[key]}</div>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",textTransform:"uppercase",letterSpacing:".06em"}}>{label}</div>
+        </div>
+      ))}
+    </div>
+
+    {/* Search + Sort */}
+    <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+      <input
+        className="fb-inp"
+        style={{flex:1,minWidth:180}}
+        placeholder="Search by title..."
+        value={search}
+        onChange={e=>setSearch(e.target.value)}
+      />
+      <select className="fb-sel" style={{width:"auto",flexShrink:0}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+        <option value="date">Sort: Date</option>
+        <option value="status">Sort: Status</option>
+        <option value="title">Sort: Title</option>
+      </select>
+    </div>
+
+    {/* Loading */}
+    {loading&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"20px 0",fontFamily:"Space Mono",fontSize:"12px",color:"var(--text4)"}}>
+      <Spinner size={14}/>Loading videos...
+    </div>}
+
+    {/* Empty */}
+    {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontFamily:"Space Mono",fontSize:"12px",color:"var(--text4)"}}>
+      {videos.length===0?"No football videos generated yet. Use the ⚽ tab to create some.":"No videos match your filter."}
+    </div>}
+
+    {/* Video grid */}
+    {!loading&&filtered.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:10}}>
+      {filtered.map((v,i)=>(
+        <div key={v.id||i} style={{
+          background:"var(--card)",
+          border:"1px solid var(--border)",
+          borderRadius:10,overflow:"hidden",
+          cursor:"pointer",transition:"border .15s"
+        }}
+          onClick={()=>setPreview(v)}
+          onMouseEnter={e=>e.currentTarget.style.borderColor="rgba(173,255,47,0.4)"}
+          onMouseLeave={e=>e.currentTarget.style.borderColor="var(--border)"}
+        >
+          {/* Thumbnail */}
+          <div style={{aspectRatio:"9/16",background:"var(--bg3)",position:"relative",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+            {v.thumb_url
+              ? <img src={v.thumb_url} alt="thumb"
+                  style={{width:"100%",height:"100%",objectFit:"cover"}}
+                  onError={e=>{e.target.style.display="none";}}/>
+              : <span style={{fontSize:"2rem",opacity:.4}}>🎬</span>
+            }
+            {/* Status badge */}
+            <div style={{
+              position:"absolute",top:6,right:6,
+              padding:"2px 7px",borderRadius:4,
+              background:STATUS_BG[v.status],
+              border:"1px solid "+STATUS_COLOR[v.status],
+              fontFamily:"Space Mono",fontSize:"8px",fontWeight:700,
+              color:STATUS_COLOR[v.status],textTransform:"uppercase",letterSpacing:".06em"
+            }}>{v.status}</div>
+            {/* YouTube link */}
+            {v.youtube_url&&<a href={v.youtube_url} target="_blank" rel="noreferrer"
+              onClick={e=>e.stopPropagation()}
+              style={{position:"absolute",bottom:6,right:6,background:"#ff0000",borderRadius:4,padding:"2px 6px",fontFamily:"Space Mono",fontSize:"8px",color:"#fff",textDecoration:"none",fontWeight:700}}>
+              YT ↗
+            </a>}
+          </div>
+          {/* Info */}
+          <div style={{padding:"8px 10px"}}>
+            <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text)",lineHeight:1.4,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
+              {v.title}
+            </div>
+            <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",lineHeight:1.5}}>
+              {v.publish_ist||"—"}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>}
+
+    {/* Preview modal */}
+    {preview&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setPreview(null)}>
+      <div style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:420,padding:20,position:"relative",maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>setPreview(null)} style={{position:"absolute",top:14,right:14,background:"none",border:"none",fontSize:"1.2rem",cursor:"pointer",color:"var(--text4)"}}>✕</button>
+
+        {/* Status badge */}
+        <div style={{display:"inline-block",padding:"3px 10px",borderRadius:6,background:STATUS_BG[preview.status],border:"1px solid "+STATUS_COLOR[preview.status],fontFamily:"Space Mono",fontSize:"9px",fontWeight:700,color:STATUS_COLOR[preview.status],textTransform:"uppercase",letterSpacing:".06em",marginBottom:12}}>
+          {preview.status}
+        </div>
+
+        <div style={{fontWeight:700,fontSize:"14px",lineHeight:1.4,marginBottom:12,paddingRight:24}}>
+          {preview.title}
+        </div>
+
+        {/* Video player if has file */}
+        {preview.id&&<video controls style={{width:"100%",aspectRatio:"9/16",borderRadius:10,background:"#000",marginBottom:12}}
+          src={SERVER+"/file/football_"+preview.id+".mp4"}
+          onError={e=>{e.target.style.display="none";}}
+        />}
+
+        {/* Details */}
+        <div style={{display:"flex",flexDirection:"column",gap:8,fontFamily:"Space Mono",fontSize:"11px"}}>
+          <div style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",background:"var(--bg3)",borderRadius:8}}>
+            <span style={{color:"var(--text4)"}}>Scheduled</span>
+            <span style={{color:"var(--text)"}}>{preview.publish_ist||"—"}</span>
+          </div>
+          {preview.youtube_id&&<div style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",background:"var(--bg3)",borderRadius:8}}>
+            <span style={{color:"var(--text4)"}}>YouTube ID</span>
+            <a href={preview.youtube_url} target="_blank" rel="noreferrer" style={{color:"#ADFF2F",textDecoration:"none"}}>{preview.youtube_id} ↗</a>
+          </div>}
+          {preview.id&&<div style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",background:"var(--bg3)",borderRadius:8}}>
+            <span style={{color:"var(--text4)"}}>Video ID</span>
+            <span style={{color:"var(--text)",fontSize:"9px"}}>{preview.id.slice(0,18)}...</span>
+          </div>}
+        </div>
+      </div>
+    </div>}
+
+  </div>;
+}
+
 // ── Aggregation Views ─────────────────────────────────────────
 function AggregateView({weeks,period}){
   const withA=weeks.filter(w=>w.analytics);
@@ -1737,6 +1951,7 @@ function App(){
         {[["month","Month"],["quarter","Quarter"],["year","Year"]].map(([id,label])=><button key={id} onClick={()=>setActiveTab(id)} style={{background:activeTab===id?"var(--bg4)":"transparent",color:activeTab===id?"var(--text)":"var(--text4)",border:"1px solid "+(activeTab===id?"var(--border)":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:600,fontSize:"11px",cursor:"pointer",flexShrink:0}}>{label}</button>)}
         <div style={{width:"1px",background:"var(--border)",margin:"0 2px",flexShrink:0}}/>
         <button onClick={()=>setActiveTab("football")} style={{background:activeTab==="football"?"#ADFF2F":"transparent",color:activeTab==="football"?"#08080E":"var(--text4)",border:"1px solid "+(activeTab==="football"?"#ADFF2F":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer",flexShrink:0}}>⚽</button>
+        <button onClick={()=>setActiveTab("storage")} style={{background:activeTab==="storage"?"#00CFFF":"transparent",color:activeTab==="storage"?"#08080E":"var(--text4)",border:"1px solid "+(activeTab==="storage"?"#00CFFF":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer",flexShrink:0}}>📦</button>
       </div>
       {/* Right controls */}
       <div style={{display:"flex",gap:"5px",alignItems:"center",flexShrink:0}}>
@@ -1755,20 +1970,22 @@ function App(){
     <div style={{maxWidth:"860px",margin:"0 auto",padding:"16px 12px 80px"}}>
       {activeTab==="football"
         ? <FootballTab settings={settings}/>
-        : isAggView
-          ? <AggregateView weeks={weeks} period={activeTab.toUpperCase()}/>
-          : activeWeekIdx>=0&&activeWeekIdx<weeks.length
-            ? <WeekWorkspace
-                week={weeks[activeWeekIdx]}
-                updateWeek={(data)=>updateWeek(activeWeekIdx,data)}
-                settings={settings}
-                ytToken={ytToken}
-                connectYT={connectYT}
-                serverOnline={serverOnline}
-                onCheckServer={checkServer}
-                allWeeks={weeks}
-              />
-            : <div style={{padding:"40px",textAlign:"center",color:"var(--text4)"}}>Select a week above</div>
+        : activeTab==="storage"
+          ? <StorageTab/>
+          : isAggView
+            ? <AggregateView weeks={weeks} period={activeTab.toUpperCase()}/>
+            : activeWeekIdx>=0&&activeWeekIdx<weeks.length
+              ? <WeekWorkspace
+                  week={weeks[activeWeekIdx]}
+                  updateWeek={(data)=>updateWeek(activeWeekIdx,data)}
+                  settings={settings}
+                  ytToken={ytToken}
+                  connectYT={connectYT}
+                  serverOnline={serverOnline}
+                  onCheckServer={checkServer}
+                  allWeeks={weeks}
+                />
+              : <div style={{padding:"40px",textAlign:"center",color:"var(--text4)"}}>Select a week above</div>
       }
     </div>
 
