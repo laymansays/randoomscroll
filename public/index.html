@@ -2008,17 +2008,25 @@ function QueueTab(){
     setSaved(s=>({...s,[id]:false}));
   }
 
+  const [saveError,setSaveError]=useState({}); // {id: errorMsg}
+
   async function reschedule(v){
     const ed = getEdit(v);
     if(!ed.date||!ed.time) return;
     setSaving(s=>({...s,[v.id]:true}));
+    setSaveError(s=>({...s,[v.id]:""}));
     try{
+      const payload = {id:v.id, date:ed.date, time:ed.time};
+      console.log("Reschedule payload:", payload);
       const r=await fetch(SERVER+"/football/reschedule",{
         method:"POST", headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({id:v.id, date:ed.date, time:ed.time})
+        body:JSON.stringify(payload)
       });
-      if(!r.ok) throw new Error(r.status);
       const d=await r.json();
+      if(!r.ok){
+        setSaveError(s=>({...s,[v.id]:d.error||"Server error "+r.status}));
+        return;
+      }
       // Update queue locally
       setQueue(q=>q.map(item=>item.id===v.id
         ?{...item, publish_at:d.publish_at,
@@ -2029,7 +2037,10 @@ function QueueTab(){
       ));
       setSaved(s=>({...s,[v.id]:true}));
       setTimeout(()=>setSaved(s=>({...s,[v.id]:false})),3000);
-    }catch(e){console.error("Reschedule failed",e);}
+    }catch(e){
+      console.error("Reschedule failed",e);
+      setSaveError(s=>({...s,[v.id]:"Network error — is server running?"}));
+    }
     setSaving(s=>({...s,[v.id]:false}));
   }
 
@@ -2198,6 +2209,11 @@ function QueueTab(){
                 style={{color:"#ADFF2F",marginLeft:10,textDecoration:"none"}}>
                 YT ↗
               </a>}
+            </div>}
+
+            {/* Save error */}
+            {saveError[v.id]&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"#FF2D6B",marginTop:4}}>
+              ✗ {saveError[v.id]}
             </div>}
 
           </div>
