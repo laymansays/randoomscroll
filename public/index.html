@@ -1098,10 +1098,12 @@ function FootballTab({settings}){
     if(!settings.footballDataKey) return;
     doMatches(); // initial load
     const interval = setInterval(()=>{
-      fetch(SERVER+"/football/matches")
+      const key = settings.footballDataKey||"";
+      const url = SERVER+"/football/matches"+(key?`?key=${encodeURIComponent(key)}`:"");
+      fetch(url)
         .then(r=>r.json())
         .then(d=>{
-          const live = (d.matches||[]).filter(m=>m.status==="LIVE");
+          const live = d.live||(d.matches||[]).filter(m=>m.status==="LIVE");
           setLiveMatches(live);
           setMatches(d.matches||[]);
           setUpsets(d.upsets||[]);
@@ -1188,10 +1190,14 @@ function FootballTab({settings}){
   async function doMatches(){
     setMatchStatus("loading");
     try{
-      const r=await fetch(SERVER+"/football/matches");
+      const key = settings.footballDataKey||"";
+      const url = SERVER+"/football/matches"+(key?`?key=${encodeURIComponent(key)}`:"");
+      const r=await fetch(url);
       if(!r.ok) throw new Error(r.status);
       const d=await r.json();
-      setMatches(d.matches||[]); setUpsets(d.upsets||[]); setMatchStatus("done");
+      setMatches(d.matches||[]); setUpsets(d.upsets||[]);
+      setLiveMatches(d.live||[]);
+      setMatchStatus("done");
     }catch(e){setMatchStatus("err");}
   }
 
@@ -1254,6 +1260,39 @@ function FootballTab({settings}){
     }catch(e){
       console.error("Reactive immediate failed:", e);
       setReactiveStatus(s=>({...s,[matchId]:"err"}));
+    }
+  }
+
+  const [playerSpotlightStatus,setPlayerSpotlightStatus]=useState({}); // {scorerKey: status}
+
+  async function doPlayerSpotlight(goal, match){
+    const key = goal.scorer+"_"+match.match_id;
+    setPlayerSpotlightStatus(s=>({...s,[key]:"generating"}));
+    try{
+      const r=await fetch(SERVER+"/football/player-spotlight",{
+        method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          scorer:goal.scorer, team:goal.team||match.team1,
+          nation:goal.team||"", match_context:`${match.team1} vs ${match.team2}, ${match.score}, ${match.round}`,
+          visual_source:visualSource, pexels_api_key:settings.pexelsKey, openai_api_key:settings.openaiKey,
+          post_now:true,
+        })
+      });
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      if(d.has_video){
+        setPlayerSpotlightStatus(s=>({...s,[key]:"uploading"}));
+        // Auto post now
+        const ur=await fetch(SERVER+"/football/upload-now",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({slot:d, title:d.topic})
+        });
+        setPlayerSpotlightStatus(s=>({...s,[key]:ur.ok?"done":"err"}));
+      } else {
+        setPlayerSpotlightStatus(s=>({...s,[key]:"err"}));
+      }
+    }catch(e){
+      setPlayerSpotlightStatus(s=>({...s,[key]:"err"}));
     }
   }
 
@@ -1346,7 +1385,7 @@ function FootballTab({settings}){
             {m.score||"0–0"} · {m.minute?m.minute+"'":"Kickoff"} · {m.round}
           </div>
           {m.goals&&m.goals.length>0&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginTop:3}}>
-            {m.goals.map((g,gi)=><span key={gi} style={{marginRight:8}}>⚽ {g.scorer} {g.minute}apos</span>)}
+            {m.goals.map((g,gi)=><span key={gi} style={{marginRight:8}}>⚽ {g.scorer} {g.minute}'</span>)}
           </div>}
         </div>
         {rs==="idle"&&<button onClick={()=>doReactiveImmediate(m)} style={{
@@ -1685,67 +1724,104 @@ function FootballTab({settings}){
             TODAY'S MATCHES
           </div>
           {matches.map((m,i)=><div key={i} style={{
-            border:"1px solid "+(m.is_upset?"#FF2D6B":"var(--border)"),
+            border:"1px solid "+(m.is_upset?"#FF2D6B":m.status==="LIVE"?"#ADFF2F":"var(--border)"),
             borderRadius:10,padding:"12px 14px",marginBottom:8,
-            background:m.is_upset?"rgba(255,45,107,0.04)":"var(--card2)",
+            background:m.is_upset?"rgba(255,45,107,0.04)":m.status==="LIVE"?"rgba(173,255,47,0.03)":"var(--card2)",
           }}>
-            {/* Match header */}
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:m.goals&&m.goals.length>0?8:0}}>
-              <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{m.team1} vs {m.team2}</div>
-              <div style={{fontFamily:"Space Mono",fontSize:"15px",fontWeight:700,color:m.status==="LIVE"?"#FF2D6B":"var(--text)"}}>
-                {m.score||"—:—"}
+            {/* Score tally header */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:6}}>
+              <div style={{flex:1}}>
+                <div style={{fontWeight:700,fontSize:"14px",marginBottom:2}}>{m.team1}</div>
               </div>
-              <Tag color={m.status==="LIVE"?"#FF2D6B":m.status==="FT"?"var(--text4)":"#00CFFF"}>
-                {m.status==="LIVE"&&m.minute?`${m.minute}'`:m.status}
-              </Tag>
+              <div style={{textAlign:"center",minWidth:80}}>
+                <div style={{fontFamily:"Space Mono",fontSize:"22px",fontWeight:700,
+                  color:m.status==="LIVE"?"#ADFF2F":"var(--text)",lineHeight:1}}>
+                  {m.score||"0 – 0"}
+                </div>
+                <Tag color={m.status==="LIVE"?"#ADFF2F":m.status==="FT"?"var(--text4)":"#00CFFF"} style={{marginTop:4}}>
+                  {m.status==="LIVE"&&m.minute?`${m.minute}'`:m.status}
+                </Tag>
+              </div>
+              <div style={{flex:1,textAlign:"right"}}>
+                <div style={{fontWeight:700,fontSize:"14px",marginBottom:2}}>{m.team2}</div>
+              </div>
             </div>
+
             {/* Round */}
-            <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:m.goals&&m.goals.length>0?6:0}}>
+            <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",textAlign:"center",marginBottom:m.goals&&m.goals.length>0?8:0}}>
               {m.round}
             </div>
-            {/* Goal scorers */}
-            {m.goals&&m.goals.length>0&&<div style={{
-              borderTop:"1px solid var(--border)",paddingTop:8,
-              display:"flex",flexWrap:"wrap",gap:6,
-            }}>
-              {m.goals.map((g,gi)=><div key={gi} style={{
-                background:"var(--bg3)",borderRadius:5,padding:"3px 8px",
-                fontFamily:"Space Mono",fontSize:"9px",color:"var(--text3)",
-                display:"flex",alignItems:"center",gap:4,
-              }}>
-                <span style={{color:g.own_goal?"#FF2D6B":"#ADFF2F"}}>⚽</span>
-                <span>{g.scorer}</span>
-                <span style={{color:"var(--text4)"}}>{g.minute}'</span>
-                {g.assist&&<span style={{color:"var(--text4)"}}>▸ {g.assist}</span>}
-                {g.own_goal&&<span style={{color:"#FF2D6B",fontSize:"8px"}}>(OG)</span>}
-              </div>)}
+
+            {/* Goal scorers with spotlight button */}
+            {m.goals&&m.goals.length>0&&<div style={{borderTop:"1px solid var(--border)",paddingTop:8}}>
+              <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",letterSpacing:".06em",marginBottom:6}}>GOALS</div>
+              {m.goals.map((g,gi)=>{
+                const sk = g.scorer+"_"+m.match_id;
+                const pss = playerSpotlightStatus[sk]||"idle";
+                return <div key={gi} style={{
+                  display:"flex",alignItems:"center",gap:8,marginBottom:6,
+                  padding:"6px 8px",background:"var(--bg3)",borderRadius:6,
+                }}>
+                  <span style={{color:g.own_goal?"#FF2D6B":"#ADFF2F",fontSize:"12px"}}>⚽</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text)",fontWeight:700}}>
+                      {g.scorer}
+                      {g.own_goal&&<span style={{color:"#FF2D6B",fontSize:"9px",marginLeft:4}}>(OG)</span>}
+                    </div>
+                    <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)"}}>
+                      {g.minute}' {g.assist&&`▸ assist: ${g.assist}`}
+                    </div>
+                  </div>
+                  {/* Player spotlight button */}
+                  {pss==="idle"&&<button onClick={()=>doPlayerSpotlight(g,m)} style={{
+                    padding:"4px 9px",borderRadius:5,background:"#a855f7",color:"#fff",
+                    border:"none",fontFamily:"Space Mono",fontSize:"8px",cursor:"pointer",
+                    whiteSpace:"nowrap",flexShrink:0,
+                  }}>🎯 Spotlight</button>}
+                  {pss!=="idle"&&pss!=="done"&&pss!=="err"&&<div style={{
+                    fontFamily:"Space Mono",fontSize:"8px",color:"#a855f7",
+                    display:"flex",alignItems:"center",gap:4,flexShrink:0,
+                  }}><Spinner size={10}/>{pss==="uploading"?"Posting…":"Generating…"}</div>}
+                  {pss==="done"&&<span style={{fontFamily:"Space Mono",fontSize:"8px",color:"#ADFF2F",flexShrink:0}}>✓ Posted!</span>}
+                  {pss==="err"&&<button onClick={()=>doPlayerSpotlight(g,m)} style={{
+                    padding:"4px 8px",borderRadius:5,background:"transparent",color:"#FF2D6B",
+                    border:"1px solid #FF2D6B",fontFamily:"Space Mono",fontSize:"8px",cursor:"pointer",flexShrink:0,
+                  }}>↺</button>}
+                </div>;
+              })}
             </div>}
+
             {/* MOTM note */}
             {m.status==="FT"&&<div style={{fontFamily:"Space Mono",fontSize:"8px",color:"var(--text4)",marginTop:6,fontStyle:"italic"}}>
               Man of the Match: not available on free API tier
             </div>}
-            {/* Generate button for finished matches */}
-            {m.status==="FT"&&<div style={{display:"flex",gap:6,marginTop:8}}>
-              <button onClick={()=>triggerFromUpset(m)}
-                style={{flex:1,padding:"5px 10px",borderRadius:5,background:"var(--bg3)",color:"var(--text4)",border:"1px solid var(--border)",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer"}}>
-                ✏️ Schedule video
-              </button>
-              <button onClick={()=>doReactiveImmediate(m)}
-                style={{flex:1,padding:"5px 10px",borderRadius:5,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer",fontWeight:700}}>
-                ⚡ Post NOW
-              </button>
-            </div>}
-            {m.status==="LIVE"&&<button onClick={()=>doReactiveImmediate(m)}
-              style={{marginTop:8,width:"100%",padding:"7px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"11px",fontWeight:700,cursor:"pointer"}}>
-              ⚡ Generate + Post Live Update Now
-            </button>}
-            {/* Reactive status per match */}
+
+            {/* Action buttons */}
+            <div style={{display:"flex",gap:6,marginTop:8}}>
+              {m.status==="FT"&&<>
+                <button onClick={()=>triggerFromUpset(m)}
+                  style={{flex:1,padding:"6px",borderRadius:6,background:"var(--bg3)",color:"var(--text4)",border:"1px solid var(--border)",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer"}}>
+                  ✏️ Schedule
+                </button>
+                <button onClick={()=>doReactiveImmediate(m)}
+                  style={{flex:1,padding:"6px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer",fontWeight:700}}>
+                  ⚡ Post NOW
+                </button>
+              </>}
+              {m.status==="LIVE"&&<button onClick={()=>doReactiveImmediate(m)}
+                style={{width:"100%",padding:"8px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",
+                  fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>
+                ⚡ Generate + Post Live Update Now
+              </button>}
+            </div>
+
+            {/* Reactive status */}
             {reactiveStatus[m.match_id||m.team1+m.team2]&&reactiveStatus[m.match_id||m.team1+m.team2]!=="idle"&&<div style={{
-              marginTop:6, fontFamily:"Space Mono", fontSize:"9px",
-              color:reactiveStatus[m.match_id||m.team1+m.team2]==="done"?"#ADFF2F":reactiveStatus[m.match_id||m.team1+m.team2]==="err"?"#FF2D6B":"#00CFFF",
-              display:"flex", alignItems:"center", gap:6,
+              marginTop:6,fontFamily:"Space Mono",fontSize:"9px",
+              color:reactiveStatus[m.match_id||m.team1+m.team2]==="done"?"#ADFF2F":"#FF2D6B",
+              display:"flex",alignItems:"center",gap:6,
             }}>
-              {reactiveStatus[m.match_id||m.team1+m.team2]!=="done"&&reactiveStatus[m.match_id||m.team1+m.team2]!=="err"&&<Spinner size={10}/>}
+              {!["done","err"].includes(reactiveStatus[m.match_id||m.team1+m.team2])&&<Spinner size={10}/>}
               {REACTIVE_LABELS[reactiveStatus[m.match_id||m.team1+m.team2]]}
             </div>}
           </div>)}
