@@ -1209,57 +1209,104 @@ function FootballTab({settings}){
   }
 
   // ── Immediate reactive post ───────────────────────────────
-  async function doReactiveImmediate(match){
-    const matchId = match.match_id||match.team1+match.team2;
-    setReactiveStatus(s=>({...s,[matchId]:"generating"}));
+  const [reactiveCount,setReactiveCount]=useState({}); // {matchId: 1|2|3}
+  const [reactiveProgress,setReactiveProgress]=useState({}); // {matchId: {current,total,step}}
 
-    const topic = match.status==="LIVE"
-      ? `${match.team1} vs ${match.team2} — Live World Cup Update`
-      : `${match.team1} ${match.score} ${match.team2} — Full Time`;
+  // Angles + styles for multi-video reactive — each must be genuinely different
+  const REACTIVE_ANGLES = [
+    {angle:"Full match reaction — what just happened and why it matters",        style:"cliffhanger"},
+    {angle:"Tactical breakdown — how did this result happen, what went wrong",   style:"documentary-lite"},
+    {angle:"Emotional angle — the human story behind this result",               style:"storytime"},
+  ];
+
+  async function doReactiveImmediate(match, countOverride){
+    const matchId = match.match_id||match.team1+match.team2;
+    const count = countOverride || reactiveCount[matchId] || 1;
+
+    setReactiveStatus(s=>({...s,[matchId]:"generating"}));
+    setReactiveProgress(s=>({...s,[matchId]:{current:0,total:count,step:""}}));
 
     const goalText = (match.goals||[]).map(g=>`${g.scorer} ${g.minute}'`).join(", ");
-    const context = `${match.team1} vs ${match.team2}, score: ${match.score}, ${match.status==="LIVE"?"currently live, minute "+match.minute:"full time"}${goalText?", goals: "+goalText:""}. Round: ${match.round}.`;
+    const context  = `${match.team1} vs ${match.team2}, score: ${match.score}, `+
+      `${match.status==="LIVE"?"currently live, minute "+match.minute:"full time"}`+
+      `${goalText?", goals: "+goalText:""}. Round: ${match.round}.`;
+
+    const usedAngles = [];
 
     try{
-      // 1. Generate script
-      const sr = await fetch(SERVER+"/football/script",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-        topic, content_style:"cliffhanger", mode:"reactive",
-        match_context:context, visual_source:visualSource
-      })});
-      if(!sr.ok) throw new Error("Script failed "+sr.status);
-      const script = await sr.json();
+      for(let i=0; i<count; i++){
+        const prog = (step)=>setReactiveProgress(s=>({...s,[matchId]:{current:i+1,total:count,step}}));
 
-      // 2. Get visuals
-      setReactiveStatus(s=>({...s,[matchId]:"visuals"}));
-      const vr = await fetch(SERVER+"/football/visuals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-        script, visual_source:visualSource,
-        pexels_api_key:settings.pexelsKey, openai_api_key:settings.openaiKey
-      })});
-      if(!vr.ok) throw new Error("Visuals failed "+vr.status);
-      const vd = await vr.json();
+        // Pick angle + style — different for each video
+        const angleObj = REACTIVE_ANGLES[i % REACTIVE_ANGLES.length];
+        const avoidText = usedAngles.length>0
+          ? ` Do NOT repeat these angles already used: ${usedAngles.join("; ")}.`
+          : "";
 
-      // 3. Assemble video
-      setReactiveStatus(s=>({...s,[matchId]:"assembling"}));
-      const ar = await fetch(SERVER+"/football/assemble",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-        script, visuals:vd.visuals||[], mode:"reactive"
-      })});
-      if(!ar.ok) throw new Error("Assembly failed "+ar.status);
-      const slot = await ar.json();
+        const topic = count===1
+          ? (match.status==="LIVE"
+              ? `${match.team1} vs ${match.team2} — Live Update`
+              : `${match.team1} ${match.score} ${match.team2}`)
+          : `${match.team1} vs ${match.team2} — ${angleObj.angle.split("—")[0].trim()}`;
 
-      if(!slot.has_video) throw new Error("Video not created");
+        // 1. Script
+        prog("Writing script…");
+        const sr = await fetch(SERVER+"/football/script",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            topic,
+            content_style: angleObj.style,
+            mode:"reactive",
+            match_context: context + avoidText +
+              ` Angle for this video: ${angleObj.angle}.`,
+            visual_source: visualSource,
+          })
+        });
+        if(!sr.ok) throw new Error("Script failed "+sr.status);
+        const script = await sr.json();
+        usedAngles.push(angleObj.angle);
 
-      // 4. Upload immediately (public, no schedule)
-      setReactiveStatus(s=>({...s,[matchId]:"uploading"}));
-      const ur = await fetch(SERVER+"/football/upload-now",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slot, title:topic})});
-      if(!ur.ok) throw new Error("Upload failed "+ur.status);
-      const ud = await ur.json();
+        // 2. Visuals
+        prog("Fetching visuals…");
+        const vr = await fetch(SERVER+"/football/visuals",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({
+            script, visual_source:visualSource,
+            pexels_api_key:settings.pexelsKey,
+            openai_api_key:settings.openaiKey,
+          })
+        });
+        if(!vr.ok) throw new Error("Visuals failed "+vr.status);
+        const vd = await vr.json();
+
+        // 3. Assemble
+        prog("Assembling… (~60s)");
+        const ar = await fetch(SERVER+"/football/assemble",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({script, visuals:vd.visuals||[], mode:"reactive"})
+        });
+        if(!ar.ok) throw new Error("Assembly failed "+ar.status);
+        const slot = await ar.json();
+        if(!slot.has_video) throw new Error("Video not created");
+
+        // 4. Upload NOW
+        prog("Uploading to YouTube…");
+        const ur = await fetch(SERVER+"/football/upload-now",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({slot, title:topic})
+        });
+        if(!ur.ok) throw new Error("Upload failed "+ur.status);
+        const ud = await ur.json();
+        console.log(`Reactive video ${i+1}/${count} posted:`, ud.youtube_url);
+      }
 
       setReactiveStatus(s=>({...s,[matchId]:"done"}));
-      console.log("Live video posted:", ud.youtube_url);
+      setReactiveProgress(s=>({...s,[matchId]:{current:count,total:count,step:"All posted!"}}));
 
     }catch(e){
       console.error("Reactive immediate failed:", e);
       setReactiveStatus(s=>({...s,[matchId]:"err"}));
+      setReactiveProgress(s=>({...s,[matchId]:{...s[matchId],step:e.message}}));
     }
   }
 
@@ -1388,17 +1435,37 @@ function FootballTab({settings}){
             {m.goals.map((g,gi)=><span key={gi} style={{marginRight:8}}>⚽ {g.scorer} {g.minute}'</span>)}
           </div>}
         </div>
-        {rs==="idle"&&<button onClick={()=>doReactiveImmediate(m)} style={{
-          padding:"10px 16px", borderRadius:8, background:"#FF2D6B",
-          color:"#fff", border:"none", fontFamily:"'Stardos Stencil','Arial Black',sans-serif",
-          fontWeight:700, fontSize:"12px", cursor:"pointer", flexShrink:0, whiteSpace:"nowrap",
-        }}>⚡ Generate + Post Now</button>}
+        {rs==="idle"&&<div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"flex-end",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)"}}>Videos:</span>
+            {[1,2,3].map(n=><button key={n} onClick={()=>setReactiveCount(s=>({...s,[mid]:n}))} style={{
+              width:26,height:26,borderRadius:5,border:"1px solid ",
+              borderColor:(reactiveCount[mid]||1)===n?"#FF2D6B":"rgba(255,255,255,0.2)",
+              background:(reactiveCount[mid]||1)===n?"#FF2D6B":"transparent",
+              color:(reactiveCount[mid]||1)===n?"#fff":"var(--text4)",
+              fontFamily:"Space Mono",fontSize:"10px",fontWeight:700,cursor:"pointer",
+            }}>{n}</button>)}
+          </div>
+          <button onClick={()=>doReactiveImmediate(m, reactiveCount[mid]||1)} style={{
+            padding:"10px 16px", borderRadius:8, background:"#FF2D6B",
+            color:"#fff", border:"none", fontFamily:"'Stardos Stencil','Arial Black',sans-serif",
+            fontWeight:700, fontSize:"12px", cursor:"pointer", whiteSpace:"nowrap",
+          }}>⚡ Generate + Post Now</button>
+        </div>}
         {rs!=="idle"&&rs!=="done"&&rs!=="err"&&<div style={{
-          display:"flex", alignItems:"center", gap:8,
-          fontFamily:"Space Mono", fontSize:"11px", color:"#FF2D6B", flexShrink:0,
-        }}><Spinner size={12}/>{REACTIVE_LABELS[rs]}</div>}
-        {rs==="done"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F",fontWeight:700,flexShrink:0}}>✓ Video posted to YouTube!</div>}
-        {rs==="err"&&<button onClick={()=>doReactiveImmediate(m)} style={{
+          display:"flex", flexDirection:"column", alignItems:"flex-end", gap:4,
+          fontFamily:"Space Mono", fontSize:"10px", color:"#FF2D6B", flexShrink:0,
+        }}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <Spinner size={10}/>
+            Video {reactiveProgress[mid]?.current||1}/{reactiveProgress[mid]?.total||1}
+          </div>
+          <div style={{fontSize:"9px",color:"rgba(255,255,255,0.5)"}}>{reactiveProgress[mid]?.step||""}</div>
+        </div>}
+        {rs==="done"&&<div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",fontWeight:700,flexShrink:0}}>
+          ✓ {reactiveProgress[mid]?.total||1} video{(reactiveProgress[mid]?.total||1)>1?"s":""} posted!
+        </div>}
+        {rs==="err"&&<button onClick={()=>doReactiveImmediate(m,reactiveCount[mid]||1)} style={{
           padding:"8px 14px", borderRadius:8, background:"transparent",
           color:"#FF2D6B", border:"1px solid #FF2D6B",
           fontFamily:"Space Mono", fontSize:"10px", cursor:"pointer", flexShrink:0,
@@ -1797,32 +1864,66 @@ function FootballTab({settings}){
             </div>}
 
             {/* Action buttons */}
-            <div style={{display:"flex",gap:6,marginTop:8}}>
+            <div style={{display:"flex",gap:6,marginTop:8,flexWrap:"wrap"}}>
               {m.status==="FT"&&<>
                 <button onClick={()=>triggerFromUpset(m)}
                   style={{flex:1,padding:"6px",borderRadius:6,background:"var(--bg3)",color:"var(--text4)",border:"1px solid var(--border)",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer"}}>
                   ✏️ Schedule
                 </button>
-                <button onClick={()=>doReactiveImmediate(m)}
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  {[1,2,3].map(n=>{
+                    const mid2=m.match_id||m.team1+m.team2;
+                    return <button key={n} onClick={()=>setReactiveCount(s=>({...s,[mid2]:n}))} style={{
+                      width:22,height:22,borderRadius:4,border:"1px solid",
+                      borderColor:(reactiveCount[mid2]||1)===n?"#FF2D6B":"var(--border)",
+                      background:(reactiveCount[mid2]||1)===n?"#FF2D6B":"transparent",
+                      color:(reactiveCount[mid2]||1)===n?"#fff":"var(--text4)",
+                      fontFamily:"Space Mono",fontSize:"9px",fontWeight:700,cursor:"pointer",
+                    }}>{n}</button>;
+                  })}
+                </div>
+                <button onClick={()=>doReactiveImmediate(m,reactiveCount[m.match_id||m.team1+m.team2]||1)}
                   style={{flex:1,padding:"6px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer",fontWeight:700}}>
-                  ⚡ Post NOW
+                  ⚡ Post {reactiveCount[m.match_id||m.team1+m.team2]||1} NOW
                 </button>
               </>}
-              {m.status==="LIVE"&&<button onClick={()=>doReactiveImmediate(m)}
-                style={{width:"100%",padding:"8px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",
-                  fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>
-                ⚡ Generate + Post Live Update Now
-              </button>}
+              {m.status==="LIVE"&&<>
+                <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                  {[1,2,3].map(n=>{
+                    const mid2=m.match_id||m.team1+m.team2;
+                    return <button key={n} onClick={()=>setReactiveCount(s=>({...s,[mid2]:n}))} style={{
+                      width:22,height:22,borderRadius:4,border:"1px solid",
+                      borderColor:(reactiveCount[mid2]||1)===n?"#FF2D6B":"var(--border)",
+                      background:(reactiveCount[mid2]||1)===n?"#FF2D6B":"transparent",
+                      color:(reactiveCount[mid2]||1)===n?"#fff":"var(--text4)",
+                      fontFamily:"Space Mono",fontSize:"9px",fontWeight:700,cursor:"pointer",
+                    }}>{n}</button>;
+                  })}
+                </div>
+                <button onClick={()=>doReactiveImmediate(m,reactiveCount[m.match_id||m.team1+m.team2]||1)}
+                  style={{flex:1,padding:"8px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",
+                    fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"12px",fontWeight:700,cursor:"pointer"}}>
+                  ⚡ Generate + Post {reactiveCount[m.match_id||m.team1+m.team2]||1} Live Update{(reactiveCount[m.match_id||m.team1+m.team2]||1)>1?"s":""}
+                </button>
+              </>}
             </div>
 
             {/* Reactive status */}
             {reactiveStatus[m.match_id||m.team1+m.team2]&&reactiveStatus[m.match_id||m.team1+m.team2]!=="idle"&&<div style={{
               marginTop:6,fontFamily:"Space Mono",fontSize:"9px",
-              color:reactiveStatus[m.match_id||m.team1+m.team2]==="done"?"#ADFF2F":"#FF2D6B",
-              display:"flex",alignItems:"center",gap:6,
+              color:reactiveStatus[m.match_id||m.team1+m.team2]==="done"?"#ADFF2F":"#00CFFF",
             }}>
-              {!["done","err"].includes(reactiveStatus[m.match_id||m.team1+m.team2])&&<Spinner size={10}/>}
-              {REACTIVE_LABELS[reactiveStatus[m.match_id||m.team1+m.team2]]}
+              {(()=>{
+                const mid3=m.match_id||m.team1+m.team2;
+                const rs3=reactiveStatus[mid3];
+                const prog=reactiveProgress[mid3];
+                if(rs3==="done") return <span>✓ {prog?.total||1} video{(prog?.total||1)>1?"s":""} posted to YouTube!</span>;
+                if(rs3==="err")  return <span style={{color:"#FF2D6B"}}>Failed — {prog?.step||"check server"}</span>;
+                return <span style={{display:"flex",alignItems:"center",gap:6}}>
+                  <Spinner size={9}/>
+                  Video {prog?.current||1}/{prog?.total||1} — {prog?.step||"Processing…"}
+                </span>;
+              })()}
             </div>}
           </div>)}
         </div>}
