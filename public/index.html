@@ -2183,26 +2183,26 @@ function QueueTab(){
                 />
               </div>
 
-              {/* Save / status button */}
-              {v.status!=="posted"&&<div style={{paddingTop:18}}>
+              {/* Reschedule button — always visible for all statuses */}
+              <div style={{paddingTop:18}}>
                 {isSaved
-                  ? <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F"}}>✓ Saved</span>
+                  ? <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F",display:"flex",alignItems:"center",gap:4}}>✓ Rescheduled!</span>
                   : <button
                       onClick={()=>reschedule(v)}
                       disabled={isSaving}
                       style={{
-                        padding:"7px 16px", borderRadius:7, border:"none",
-                        background:changed?"#ADFF2F":"var(--card2)",
-                        color:changed?"#08080E":"var(--text)",
-                        border: changed?"none":"1px solid var(--border)",
+                        padding:"7px 14px", borderRadius:7, border:"1px solid",
+                        borderColor:changed?"#ADFF2F":"var(--border)",
+                        background:changed?"#ADFF2F":"transparent",
+                        color:changed?"#08080E":"var(--text4)",
                         fontFamily:"'Stardos Stencil','Arial Black',sans-serif",
                         fontSize:"11px", fontWeight:700, cursor:"pointer",
-                        opacity:isSaving?0.6:1,
+                        opacity:isSaving?0.6:1, whiteSpace:"nowrap",
                       }}>
-                      {isSaving?<><Spinner size={10}/> Saving…</>:"Save"}
+                      {isSaving?<><Spinner size={10}/> Saving…</>:"↺ Reschedule"}
                     </button>
                 }
-              </div>}
+              </div>
             </div>
 
             {/* Current schedule info */}
