@@ -1089,7 +1089,27 @@ function FootballTab({settings}){
   const [matchStatus,setMatchStatus]=useState("idle");
   const [matches,setMatches]=useState([]);
   const [upsets,setUpsets]=useState([]);
+  const [liveMatches,setLiveMatches]=useState([]); // currently LIVE matches
+  const [reactiveStatus,setReactiveStatus]=useState({}); // {matchId: "idle|generating|uploading|done|err"}
   const [modal,setModal]=useState(false);
+
+  // Poll for live matches every 3 minutes while tab is open
+  React.useEffect(()=>{
+    if(!settings.footballDataKey) return;
+    doMatches(); // initial load
+    const interval = setInterval(()=>{
+      fetch(SERVER+"/football/matches")
+        .then(r=>r.json())
+        .then(d=>{
+          const live = (d.matches||[]).filter(m=>m.status==="LIVE");
+          setLiveMatches(live);
+          setMatches(d.matches||[]);
+          setUpsets(d.upsets||[]);
+        })
+        .catch(()=>{});
+    }, 3*60*1000); // 3 min
+    return ()=>clearInterval(interval);
+  },[settings.footballDataKey]);
   // Batch mode state
   const [batchMode,setBatchMode]=useState(false);
   const [batchCount,setBatchCount]=useState(10);
@@ -1182,6 +1202,70 @@ function FootballTab({settings}){
     window.scrollTo({top:0,behavior:"smooth"});
   }
 
+  // ── Immediate reactive post ───────────────────────────────
+  async function doReactiveImmediate(match){
+    const matchId = match.match_id||match.team1+match.team2;
+    setReactiveStatus(s=>({...s,[matchId]:"generating"}));
+
+    const topic = match.status==="LIVE"
+      ? `${match.team1} vs ${match.team2} — Live World Cup Update`
+      : `${match.team1} ${match.score} ${match.team2} — Full Time`;
+
+    const goalText = (match.goals||[]).map(g=>`${g.scorer} ${g.minute}'`).join(", ");
+    const context = `${match.team1} vs ${match.team2}, score: ${match.score}, ${match.status==="LIVE"?"currently live, minute "+match.minute:"full time"}${goalText?", goals: "+goalText:""}. Round: ${match.round}.`;
+
+    try{
+      // 1. Generate script
+      const sr = await fetch(SERVER+"/football/script",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        topic, content_style:"cliffhanger", mode:"reactive",
+        match_context:context, visual_source:visualSource
+      })});
+      if(!sr.ok) throw new Error("Script failed "+sr.status);
+      const script = await sr.json();
+
+      // 2. Get visuals
+      setReactiveStatus(s=>({...s,[matchId]:"visuals"}));
+      const vr = await fetch(SERVER+"/football/visuals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        script, visual_source:visualSource,
+        pexels_api_key:settings.pexelsKey, openai_api_key:settings.openaiKey
+      })});
+      if(!vr.ok) throw new Error("Visuals failed "+vr.status);
+      const vd = await vr.json();
+
+      // 3. Assemble video
+      setReactiveStatus(s=>({...s,[matchId]:"assembling"}));
+      const ar = await fetch(SERVER+"/football/assemble",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        script, visuals:vd.visuals||[], mode:"reactive"
+      })});
+      if(!ar.ok) throw new Error("Assembly failed "+ar.status);
+      const slot = await ar.json();
+
+      if(!slot.has_video) throw new Error("Video not created");
+
+      // 4. Upload immediately (public, no schedule)
+      setReactiveStatus(s=>({...s,[matchId]:"uploading"}));
+      const ur = await fetch(SERVER+"/football/upload-now",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slot, title:topic})});
+      if(!ur.ok) throw new Error("Upload failed "+ur.status);
+      const ud = await ur.json();
+
+      setReactiveStatus(s=>({...s,[matchId]:"done"}));
+      console.log("Live video posted:", ud.youtube_url);
+
+    }catch(e){
+      console.error("Reactive immediate failed:", e);
+      setReactiveStatus(s=>({...s,[matchId]:"err"}));
+    }
+  }
+
+  const REACTIVE_LABELS = {
+    generating:"Writing script…",
+    visuals:"Fetching visuals…",
+    assembling:"Assembling video… (~60s)",
+    uploading:"Uploading to YouTube…",
+    done:"✓ Posted live!",
+    err:"Failed — check server",
+  };
+
   // ── Batch mode functions ──────────────────────────────────
   async function doBatchAngles(){
     if(!activeTopic) return;
@@ -1242,6 +1326,46 @@ function FootballTab({settings}){
   }
 
   return <div className="fade-up" style={{paddingBottom:60}}>
+
+    {/* ── LIVE MATCH ALERT BANNER ── */}
+    {liveMatches.map((m,i)=>{
+      const mid = m.match_id||m.team1+m.team2;
+      const rs = reactiveStatus[mid]||"idle";
+      return <div key={i} style={{
+        background:"linear-gradient(90deg,#FF2D6B22,#FF2D6B11)",
+        border:"1.5px solid #FF2D6B",
+        borderRadius:12, padding:"14px 16px", marginBottom:12,
+        display:"flex", alignItems:"center", gap:12, flexWrap:"wrap",
+      }}>
+        <span className="live-dot" style={{flexShrink:0}}/>
+        <div style={{flex:1,minWidth:180}}>
+          <div style={{fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"14px",fontWeight:700,color:"#FF2D6B",marginBottom:3}}>
+            🔴 LIVE: {m.team1} vs {m.team2}
+          </div>
+          <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>
+            {m.score||"0–0"} · {m.minute?m.minute+"'":"Kickoff"} · {m.round}
+          </div>
+          {m.goals&&m.goals.length>0&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginTop:3}}>
+            {m.goals.map((g,gi)=><span key={gi} style={{marginRight:8}}>⚽ {g.scorer} {g.minute}apos</span>)}
+          </div>}
+        </div>
+        {rs==="idle"&&<button onClick={()=>doReactiveImmediate(m)} style={{
+          padding:"10px 16px", borderRadius:8, background:"#FF2D6B",
+          color:"#fff", border:"none", fontFamily:"'Stardos Stencil','Arial Black',sans-serif",
+          fontWeight:700, fontSize:"12px", cursor:"pointer", flexShrink:0, whiteSpace:"nowrap",
+        }}>⚡ Generate + Post Now</button>}
+        {rs!=="idle"&&rs!=="done"&&rs!=="err"&&<div style={{
+          display:"flex", alignItems:"center", gap:8,
+          fontFamily:"Space Mono", fontSize:"11px", color:"#FF2D6B", flexShrink:0,
+        }}><Spinner size={12}/>{REACTIVE_LABELS[rs]}</div>}
+        {rs==="done"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"#ADFF2F",fontWeight:700,flexShrink:0}}>✓ Video posted to YouTube!</div>}
+        {rs==="err"&&<button onClick={()=>doReactiveImmediate(m)} style={{
+          padding:"8px 14px", borderRadius:8, background:"transparent",
+          color:"#FF2D6B", border:"1px solid #FF2D6B",
+          fontFamily:"Space Mono", fontSize:"10px", cursor:"pointer", flexShrink:0,
+        }}>↺ Retry</button>}
+      </div>;
+    })}
 
     {/* Stage 1: Topic */}
     <div className={`fb-stage ${openStage===1?"active":""}`}>
@@ -1526,37 +1650,109 @@ function FootballTab({settings}){
       {openStage===6&&<div className="fb-stage-body">
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
           <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text3)"}}>
-            <span className="live-dot"/>World Cup 2026 · Polls every 30 min
+            <span className="live-dot"/>World Cup 2026 · Auto-polls every 30 min
           </div>
           <Btn small variant="ghost" onClick={doMatches} disabled={matchStatus==="loading"}>
-            {matchStatus==="loading"?<><Spinner size={12}/>Checking…</>:"↺ Refresh"}
+            {matchStatus==="loading"?<><Spinner size={12}/>Fetching…</>:"↺ Live Refresh"}
           </Btn>
         </div>
 
         {matchStatus==="err"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",marginBottom:12}}>
-          Could not fetch matches.{!settings.footballDataKey&&<span style={{color:"#FF2D6B"}}> Add Football-Data.org API key in ⚙️ Setup → Football Engine section.</span>}
+          Could not fetch matches.{!settings.footballDataKey&&<span style={{color:"#FF2D6B"}}> Add Football-Data.org API key in ⚙️ Setup → Football Engine.</span>}
         </div>}
 
+        {/* Content opportunities from upsets */}
         {upsets.length>0&&<div style={{marginBottom:14}}>
           <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"#FF2D6B",letterSpacing:".08em",marginBottom:8}}>⚡ CONTENT OPPORTUNITIES</div>
           {upsets.map((u,i)=><div key={i} className="match-card upset">
-            <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{u.team1} vs {u.team2}</div>
-            <div style={{fontFamily:"Space Mono",fontSize:"16px",fontWeight:700,color:"#FF2D6B"}}>{u.score}</div>
+            <div style={{flex:1}}>
+              <div style={{fontWeight:700,fontSize:"13px",marginBottom:3}}>{u.team1} vs {u.team2}</div>
+              {u.goals&&u.goals.length>0&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",lineHeight:1.8}}>
+                {u.goals.map((g,gi)=><span key={gi} style={{marginRight:8}}>
+                  {g.own_goal?"(OG) ":""}{g.scorer} {g.minute}'
+                  {g.assist&&<span style={{color:"var(--text4)"}}> ▸ {g.assist}</span>}
+                </span>)}
+              </div>}
+            </div>
+            <div style={{fontFamily:"Space Mono",fontSize:"16px",fontWeight:700,color:"#FF2D6B",margin:"0 8px"}}>{u.score}</div>
             <button onClick={()=>triggerFromUpset(u)} style={{padding:"5px 10px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"Space Mono",fontSize:"10px",cursor:"pointer",flexShrink:0}}>Generate →</button>
           </div>)}
         </div>}
 
+        {/* All today's matches */}
         {matches.length>0&&<div>
-          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",letterSpacing:".08em",marginBottom:8}}>TODAY'S MATCHES</div>
-          {matches.map((m,i)=><div key={i} className={`match-card ${m.is_upset?"upset":""}`}>
-            <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{m.team1} vs {m.team2}</div>
-            <div style={{fontFamily:"Space Mono",fontSize:"15px",fontWeight:700,color:"var(--text)"}}>{m.score||"—:—"}</div>
-            <Tag color={m.status==="LIVE"?"#FF2D6B":m.status==="FT"?"var(--text4)":"#00CFFF"}>{m.status}</Tag>
+          <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)",letterSpacing:".08em",marginBottom:8}}>
+            TODAY'S MATCHES
+          </div>
+          {matches.map((m,i)=><div key={i} style={{
+            border:"1px solid "+(m.is_upset?"#FF2D6B":"var(--border)"),
+            borderRadius:10,padding:"12px 14px",marginBottom:8,
+            background:m.is_upset?"rgba(255,45,107,0.04)":"var(--card2)",
+          }}>
+            {/* Match header */}
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:m.goals&&m.goals.length>0?8:0}}>
+              <div style={{flex:1,fontWeight:700,fontSize:"13px"}}>{m.team1} vs {m.team2}</div>
+              <div style={{fontFamily:"Space Mono",fontSize:"15px",fontWeight:700,color:m.status==="LIVE"?"#FF2D6B":"var(--text)"}}>
+                {m.score||"—:—"}
+              </div>
+              <Tag color={m.status==="LIVE"?"#FF2D6B":m.status==="FT"?"var(--text4)":"#00CFFF"}>
+                {m.status==="LIVE"&&m.minute?`${m.minute}'`:m.status}
+              </Tag>
+            </div>
+            {/* Round */}
+            <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:m.goals&&m.goals.length>0?6:0}}>
+              {m.round}
+            </div>
+            {/* Goal scorers */}
+            {m.goals&&m.goals.length>0&&<div style={{
+              borderTop:"1px solid var(--border)",paddingTop:8,
+              display:"flex",flexWrap:"wrap",gap:6,
+            }}>
+              {m.goals.map((g,gi)=><div key={gi} style={{
+                background:"var(--bg3)",borderRadius:5,padding:"3px 8px",
+                fontFamily:"Space Mono",fontSize:"9px",color:"var(--text3)",
+                display:"flex",alignItems:"center",gap:4,
+              }}>
+                <span style={{color:g.own_goal?"#FF2D6B":"#ADFF2F"}}>⚽</span>
+                <span>{g.scorer}</span>
+                <span style={{color:"var(--text4)"}}>{g.minute}'</span>
+                {g.assist&&<span style={{color:"var(--text4)"}}>▸ {g.assist}</span>}
+                {g.own_goal&&<span style={{color:"#FF2D6B",fontSize:"8px"}}>(OG)</span>}
+              </div>)}
+            </div>}
+            {/* MOTM note */}
+            {m.status==="FT"&&<div style={{fontFamily:"Space Mono",fontSize:"8px",color:"var(--text4)",marginTop:6,fontStyle:"italic"}}>
+              Man of the Match: not available on free API tier
+            </div>}
+            {/* Generate button for finished matches */}
+            {m.status==="FT"&&<div style={{display:"flex",gap:6,marginTop:8}}>
+              <button onClick={()=>triggerFromUpset(m)}
+                style={{flex:1,padding:"5px 10px",borderRadius:5,background:"var(--bg3)",color:"var(--text4)",border:"1px solid var(--border)",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer"}}>
+                ✏️ Schedule video
+              </button>
+              <button onClick={()=>doReactiveImmediate(m)}
+                style={{flex:1,padding:"5px 10px",borderRadius:5,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"Space Mono",fontSize:"9px",cursor:"pointer",fontWeight:700}}>
+                ⚡ Post NOW
+              </button>
+            </div>}
+            {m.status==="LIVE"&&<button onClick={()=>doReactiveImmediate(m)}
+              style={{marginTop:8,width:"100%",padding:"7px",borderRadius:6,background:"#FF2D6B",color:"#fff",border:"none",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"11px",fontWeight:700,cursor:"pointer"}}>
+              ⚡ Generate + Post Live Update Now
+            </button>}
+            {/* Reactive status per match */}
+            {reactiveStatus[m.match_id||m.team1+m.team2]&&reactiveStatus[m.match_id||m.team1+m.team2]!=="idle"&&<div style={{
+              marginTop:6, fontFamily:"Space Mono", fontSize:"9px",
+              color:reactiveStatus[m.match_id||m.team1+m.team2]==="done"?"#ADFF2F":reactiveStatus[m.match_id||m.team1+m.team2]==="err"?"#FF2D6B":"#00CFFF",
+              display:"flex", alignItems:"center", gap:6,
+            }}>
+              {reactiveStatus[m.match_id||m.team1+m.team2]!=="done"&&reactiveStatus[m.match_id||m.team1+m.team2]!=="err"&&<Spinner size={10}/>}
+              {REACTIVE_LABELS[reactiveStatus[m.match_id||m.team1+m.team2]]}
+            </div>}
           </div>)}
         </div>}
 
-        {matches.length===0&&matchStatus!=="loading"&&matchStatus!=="err"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)"}}>
-          Click Refresh to load today's World Cup matches.
+        {matches.length===0&&matchStatus!=="loading"&&matchStatus!=="err"&&<div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)",padding:"10px 0"}}>
+          Click "↺ Live Refresh" to load today's World Cup matches and scores.
         </div>}
       </div>}
     </div>
