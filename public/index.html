@@ -1875,6 +1875,254 @@ function FootballTab({settings}){
   </div>;
 }
 
+// ── Queue Tab ─────────────────────────────────────────────────
+function QueueTab(){
+  const [queue,setQueue]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [filter,setFilter]=useState("all"); // all|pending|scheduled|posted
+  const [saving,setSaving]=useState({}); // {id: bool}
+  const [saved,setSaved]=useState({});   // {id: bool}
+  const [edits,setEdits]=useState({});   // {id: {date,time}}
+  const [preview,setPreview]=useState(null);
+
+  async function load(){
+    setLoading(true);
+    try{
+      const r=await fetch(SERVER+"/queue");
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      setQueue(d.queue||[]);
+    }catch(e){console.error("Queue load failed",e);}
+    setLoading(false);
+  }
+
+  React.useEffect(()=>{load();},[]);
+
+  function getEdit(v){
+    return edits[v.id]||{date:v.publish_date||"",time:v.publish_time||""};
+  }
+
+  function setEdit(id, field, val){
+    setEdits(e=>({...e,[id]:{...( e[id]||{}), [field]:val}}));
+    setSaved(s=>({...s,[id]:false}));
+  }
+
+  async function reschedule(v){
+    const ed = getEdit(v);
+    if(!ed.date||!ed.time) return;
+    setSaving(s=>({...s,[v.id]:true}));
+    try{
+      const r=await fetch(SERVER+"/football/reschedule",{
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({id:v.id, date:ed.date, time:ed.time})
+      });
+      if(!r.ok) throw new Error(r.status);
+      const d=await r.json();
+      // Update queue locally
+      setQueue(q=>q.map(item=>item.id===v.id
+        ?{...item, publish_at:d.publish_at,
+          publish_date:ed.date, publish_time:ed.time,
+          publish_ist: new Date(d.publish_at).toLocaleString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
+          status: item.youtube_id ? "scheduled" : "pending"
+        }:item
+      ));
+      setSaved(s=>({...s,[v.id]:true}));
+      setTimeout(()=>setSaved(s=>({...s,[v.id]:false})),3000);
+    }catch(e){console.error("Reschedule failed",e);}
+    setSaving(s=>({...s,[v.id]:false}));
+  }
+
+  const STATUS_COLOR={posted:"#ADFF2F",scheduled:"#00CFFF",pending:"#FF6B35"};
+  const STATUS_BG   ={posted:"rgba(173,255,47,0.08)",scheduled:"rgba(0,207,255,0.08)",pending:"rgba(255,107,53,0.08)"};
+
+  const filtered = queue.filter(v=>filter==="all"||v.status===filter);
+  const counts   = {
+    all:queue.length,
+    pending:queue.filter(v=>v.status==="pending").length,
+    scheduled:queue.filter(v=>v.status==="scheduled").length,
+    posted:queue.filter(v=>v.status==="posted").length,
+  };
+
+  return <div className="fade-up" style={{paddingBottom:60}}>
+
+    {/* Header */}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+      <div>
+        <div style={{fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontSize:"20px",fontWeight:700,letterSpacing:".06em",marginBottom:4}}>
+          Schedule Queue
+        </div>
+        <div style={{fontFamily:"Space Mono",fontSize:"11px",color:"var(--text4)"}}>
+          Set exact date and time for each video · IST timezone
+        </div>
+      </div>
+      <button onClick={load} style={{padding:"8px 14px",borderRadius:8,border:"1px solid var(--border)",background:"transparent",color:"var(--text4)",fontFamily:"Space Mono",fontSize:"11px",cursor:"pointer"}}>
+        {loading?"Loading…":"↺ Refresh"}
+      </button>
+    </div>
+
+    {/* Filter tabs */}
+    <div style={{display:"flex",gap:6,marginBottom:20}}>
+      {["all","pending","scheduled","posted"].map(f=>(
+        <button key={f} onClick={()=>setFilter(f)} style={{
+          padding:"6px 14px", borderRadius:20,
+          border:"1px solid "+(filter===f?STATUS_COLOR[f]||"#ADFF2F":"var(--border)"),
+          background:filter===f?(STATUS_BG[f]||"rgba(173,255,47,0.08)"):"transparent",
+          color:filter===f?(STATUS_COLOR[f]||"#ADFF2F"):"var(--text4)",
+          fontFamily:"Space Mono", fontSize:"10px", cursor:"pointer",
+          textTransform:"uppercase", letterSpacing:".06em",
+        }}>
+          {f} {counts[f]>0&&<span style={{opacity:.7}}>({counts[f]})</span>}
+        </button>
+      ))}
+    </div>
+
+    {loading&&<div style={{display:"flex",alignItems:"center",gap:10,padding:"20px 0",fontFamily:"Space Mono",fontSize:"12px",color:"var(--text4)"}}>
+      <Spinner size={14}/>Loading queue...
+    </div>}
+
+    {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"40px 0",fontFamily:"Space Mono",fontSize:"12px",color:"var(--text4)"}}>
+      {queue.length===0
+        ? "No videos in queue. Generate some in the ⚽ tab first."
+        : `No ${filter} videos.`}
+    </div>}
+
+    {/* Queue rows */}
+    {!loading&&filtered.map((v,i)=>{
+      const ed = getEdit(v);
+      const isSaving = saving[v.id];
+      const isSaved  = saved[v.id];
+      const changed  = edits[v.id] && (edits[v.id].date!==v.publish_date || edits[v.id].time!==v.publish_time);
+
+      return <div key={v.id||i} style={{
+        border:"1px solid var(--border)",
+        borderRadius:12, padding:16, marginBottom:10,
+        background:"var(--card)",
+        transition:"border .15s",
+      }}>
+        <div style={{display:"flex",gap:14,alignItems:"flex-start"}}>
+
+          {/* Thumbnail */}
+          <div onClick={()=>setPreview(v)} style={{
+            width:72, aspectRatio:"9/16", borderRadius:8,
+            background:"var(--bg3)", overflow:"hidden",
+            cursor:"pointer", flexShrink:0,
+            border:"1px solid var(--border)",
+            display:"flex",alignItems:"center",justifyContent:"center",
+          }}>
+            {v.thumb_url
+              ? <img src={v.thumb_url} alt="thumb" style={{width:"100%",height:"100%",objectFit:"cover"}}
+                  onError={e=>e.target.style.display="none"}/>
+              : <span style={{fontSize:"1.5rem",opacity:.4}}>🎬</span>}
+          </div>
+
+          {/* Main content */}
+          <div style={{flex:1,minWidth:0}}>
+
+            {/* Title + status */}
+            <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:8}}>
+              <div style={{flex:1,fontWeight:700,fontSize:"13px",lineHeight:1.4,
+                overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>
+                {v.title||"Untitled"}
+              </div>
+              <span style={{
+                padding:"2px 8px",borderRadius:4,flexShrink:0,
+                fontFamily:"Space Mono",fontSize:"9px",fontWeight:700,
+                textTransform:"uppercase",letterSpacing:".06em",
+                background:STATUS_BG[v.status],color:STATUS_COLOR[v.status],
+                border:"1px solid "+STATUS_COLOR[v.status],
+              }}>{v.status}</span>
+            </div>
+
+            {/* Date + Time pickers */}
+            <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+              <div>
+                <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:3,textTransform:"uppercase",letterSpacing:".06em"}}>Date (IST)</div>
+                <input
+                  type="date"
+                  value={ed.date}
+                  min={new Date().toISOString().split("T")[0]}
+                  disabled={v.status==="posted"}
+                  onChange={e=>setEdit(v.id,"date",e.target.value)}
+                  style={{
+                    padding:"7px 10px", borderRadius:7,
+                    border:"1px solid "+(changed?"#ADFF2F":"var(--border)"),
+                    background:"var(--input-bg)", color:"var(--text)",
+                    fontFamily:"Space Mono", fontSize:"11px",
+                    cursor:v.status==="posted"?"not-allowed":"pointer",
+                  }}
+                />
+              </div>
+              <div>
+                <div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginBottom:3,textTransform:"uppercase",letterSpacing:".06em"}}>Time (IST)</div>
+                <input
+                  type="time"
+                  value={ed.time}
+                  disabled={v.status==="posted"}
+                  onChange={e=>setEdit(v.id,"time",e.target.value)}
+                  style={{
+                    padding:"7px 10px", borderRadius:7,
+                    border:"1px solid "+(changed?"#ADFF2F":"var(--border)"),
+                    background:"var(--input-bg)", color:"var(--text)",
+                    fontFamily:"Space Mono", fontSize:"11px",
+                    cursor:v.status==="posted"?"not-allowed":"pointer",
+                  }}
+                />
+              </div>
+
+              {/* Save / status button */}
+              {v.status!=="posted"&&<div style={{paddingTop:18}}>
+                {isSaved
+                  ? <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F"}}>✓ Saved</span>
+                  : <button
+                      onClick={()=>reschedule(v)}
+                      disabled={isSaving||!ed.date||!ed.time}
+                      style={{
+                        padding:"7px 16px", borderRadius:7, border:"none",
+                        background:changed?"#ADFF2F":"var(--bg3)",
+                        color:changed?"#08080E":"var(--text4)",
+                        fontFamily:"'Stardos Stencil','Arial Black',sans-serif",
+                        fontSize:"11px", fontWeight:700, cursor:"pointer",
+                        opacity:isSaving?0.6:1,
+                      }}>
+                      {isSaving?<><Spinner size={10}/> Saving…</>:"Save"}
+                    </button>
+                }
+              </div>}
+            </div>
+
+            {/* Current schedule info */}
+            {v.publish_ist&&<div style={{fontFamily:"Space Mono",fontSize:"9px",color:"var(--text4)",marginTop:6}}>
+              Currently: {v.publish_ist} IST
+              {v.youtube_id&&<a href={v.youtube_url} target="_blank" rel="noreferrer"
+                style={{color:"#ADFF2F",marginLeft:10,textDecoration:"none"}}>
+                YT ↗
+              </a>}
+            </div>}
+
+          </div>
+        </div>
+      </div>;
+    })}
+
+    {/* Video preview modal */}
+    {preview&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setPreview(null)}>
+      <div style={{background:"var(--card)",borderRadius:16,width:"100%",maxWidth:380,padding:20,position:"relative"}} onClick={e=>e.stopPropagation()}>
+        <button onClick={()=>setPreview(null)} style={{position:"absolute",top:14,right:14,background:"none",border:"none",fontSize:"1.2rem",cursor:"pointer",color:"var(--text4)"}}>✕</button>
+        <div style={{fontWeight:700,fontSize:"13px",marginBottom:12,paddingRight:24,lineHeight:1.4}}>{preview.title}</div>
+        <video controls style={{width:"100%",aspectRatio:"9/16",borderRadius:10,background:"#000",marginBottom:12}}
+          src={SERVER+"/file/football_"+preview.id+".mp4"}
+          onError={e=>{e.target.style.display="none";}}/>
+        <div style={{fontFamily:"Space Mono",fontSize:"10px",color:"var(--text4)"}}>
+          {preview.publish_ist||"Not scheduled"}
+          {preview.youtube_url&&<a href={preview.youtube_url} target="_blank" rel="noreferrer"
+            style={{color:"#ADFF2F",marginLeft:10,textDecoration:"none"}}>Open on YouTube ↗</a>}
+        </div>
+      </div>
+    </div>}
+
+  </div>;
+}
+
 // ── Storage Tab ───────────────────────────────────────────────
 function StorageTab(){
   const [videos,setVideos]=useState([]);
@@ -2224,6 +2472,7 @@ function App(){
         <div style={{width:"1px",background:"var(--border)",margin:"0 2px",flexShrink:0}}/>
         <button onClick={()=>setActiveTab("football")} style={{background:activeTab==="football"?"#ADFF2F":"transparent",color:activeTab==="football"?"#08080E":"var(--text4)",border:"1px solid "+(activeTab==="football"?"#ADFF2F":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer",flexShrink:0}}>⚽</button>
         <button onClick={()=>setActiveTab("storage")} style={{background:activeTab==="storage"?"#00CFFF":"transparent",color:activeTab==="storage"?"#08080E":"var(--text4)",border:"1px solid "+(activeTab==="storage"?"#00CFFF":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer",flexShrink:0}}>📦</button>
+        <button onClick={()=>setActiveTab("queue")} style={{background:activeTab==="queue"?"#f59e0b":"transparent",color:activeTab==="queue"?"#08080E":"var(--text4)",border:"1px solid "+(activeTab==="queue"?"#f59e0b":"transparent"),borderRadius:"8px",padding:"5px 10px",fontFamily:"'Stardos Stencil','Arial Black',sans-serif",fontWeight:700,fontSize:"13px",cursor:"pointer",flexShrink:0}}>📅</button>
       </div>
       {/* Right controls */}
       <div style={{display:"flex",gap:"5px",alignItems:"center",flexShrink:0}}>
@@ -2244,7 +2493,9 @@ function App(){
         ? <FootballTab settings={settings}/>
         : activeTab==="storage"
           ? <StorageTab/>
-          : isAggView
+          : activeTab==="queue"
+            ? <QueueTab/>
+            : isAggView
             ? <AggregateView weeks={weeks} period={activeTab.toUpperCase()}/>
             : activeWeekIdx>=0&&activeWeekIdx<weeks.length
               ? <WeekWorkspace
