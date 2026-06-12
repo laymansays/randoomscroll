@@ -2012,11 +2012,14 @@ function QueueTab(){
 
   async function reschedule(v){
     const ed = getEdit(v);
-    if(!ed.date||!ed.time) return;
+    // Use today + current time as fallback if inputs are empty
+    const now = new Date();
+    const dateVal = ed.date || now.toISOString().split("T")[0];
+    const timeVal = ed.time || now.toTimeString().slice(0,5);
     setSaving(s=>({...s,[v.id]:true}));
     setSaveError(s=>({...s,[v.id]:""}));
     try{
-      const payload = {id:v.id, date:ed.date, time:ed.time};
+      const payload = {id:v.id, date:dateVal, time:timeVal};
       console.log("Reschedule payload:", payload);
       const r=await fetch(SERVER+"/football/reschedule",{
         method:"POST", headers:{"Content-Type":"application/json"},
@@ -2027,10 +2030,9 @@ function QueueTab(){
         setSaveError(s=>({...s,[v.id]:d.error||"Server error "+r.status}));
         return;
       }
-      // Update queue locally
       setQueue(q=>q.map(item=>item.id===v.id
         ?{...item, publish_at:d.publish_at,
-          publish_date:ed.date, publish_time:ed.time,
+          publish_date:dateVal, publish_time:timeVal,
           publish_ist: new Date(d.publish_at).toLocaleString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}),
           status: item.youtube_id ? "scheduled" : "pending"
         }:item
@@ -2187,11 +2189,12 @@ function QueueTab(){
                   ? <span style={{fontFamily:"Space Mono",fontSize:"10px",color:"#ADFF2F"}}>✓ Saved</span>
                   : <button
                       onClick={()=>reschedule(v)}
-                      disabled={isSaving||!ed.date||!ed.time}
+                      disabled={isSaving}
                       style={{
                         padding:"7px 16px", borderRadius:7, border:"none",
-                        background:changed?"#ADFF2F":"var(--bg3)",
-                        color:changed?"#08080E":"var(--text4)",
+                        background:changed?"#ADFF2F":"var(--card2)",
+                        color:changed?"#08080E":"var(--text)",
+                        border: changed?"none":"1px solid var(--border)",
                         fontFamily:"'Stardos Stencil','Arial Black',sans-serif",
                         fontSize:"11px", fontWeight:700, cursor:"pointer",
                         opacity:isSaving?0.6:1,
